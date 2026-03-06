@@ -1,0 +1,356 @@
+basePath: /api/v1
+definitions:
+  models.Edge:
+    properties:
+      from:
+        type: string
+      id:
+        type: string
+      properties:
+        additionalProperties: {}
+        type: object
+      to:
+        type: string
+      type:
+        $ref: '#/definitions/models.EdgeType'
+    type: object
+  models.EdgeType:
+    enum:
+    - INVOLVED_IN
+    - DEFENDANT_IN
+    - MEMBER_OF
+    - IMPLICATED_IN
+    - INVESTIGATES
+    - RELATED_TO
+    - SUPPORTS
+    type: string
+    x-enum-varnames:
+    - EdgeTypeInvolvedIn
+    - EdgeTypeDefendantIn
+    - EdgeTypeMemberOf
+    - EdgeTypeImplicatedIn
+    - EdgeTypeInvestigates
+    - EdgeTypeRelatedTo
+    - EdgeTypeSupports
+  models.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  models.GraphResponse:
+    properties:
+      edges:
+        items:
+          $ref: '#/definitions/models.Edge'
+        type: array
+      nodes:
+        items:
+          $ref: '#/definitions/models.Node'
+        type: array
+    type: object
+  models.Node:
+    properties:
+      id:
+        type: string
+      label:
+        type: string
+      properties:
+        additionalProperties: {}
+        type: object
+      type:
+        $ref: '#/definitions/models.NodeType'
+    type: object
+  models.NodeType:
+    enum:
+    - politician
+    - scandal
+    - organization
+    - legal_proceeding
+    type: string
+    x-enum-varnames:
+    - NodeTypePolitician
+    - NodeTypeScandal
+    - NodeTypeOrganization
+    - NodeTypeLegalProceeding
+  models.Politician:
+    properties:
+      active:
+        type: boolean
+      id:
+        type: string
+      name:
+        type: string
+      name_aliases:
+        items:
+          type: string
+        type: array
+      party_current:
+        type: string
+      photo_url:
+        type: string
+      role_current:
+        type: string
+      state:
+        type: string
+      tse_profile_url:
+        type: string
+    type: object
+  models.Scandal:
+    properties:
+      aliases:
+        items:
+          type: string
+        type: array
+      date_end:
+        type: string
+      date_start:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/models.StatusType'
+        description: ongoing|concluded|prescribed
+      total_amount_brl:
+        type: number
+      wikipedia_url:
+        type: string
+    type: object
+  models.StatusType:
+    enum:
+    - ongoing
+    - concluded
+    - prescribed
+    type: string
+    x-enum-varnames:
+    - StatusTypeOngoing
+    - StatusTypeConcluded
+    - StatusTypePrescribed
+info:
+  contact: {}
+  description: corruption graph api
+  title: ⌬ API
+  version: 0.1.0
+paths:
+  /graph/expand/{id}:
+    get:
+      description: Returns nodes and edges reachable from a node within N hops
+      parameters:
+      - description: Node ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Traversal depth (default 2)
+        in: query
+        name: hops
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.GraphResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Expand a node N hops
+      tags:
+      - graph
+  /graph/politician/{id}:
+    get:
+      description: Returns nodes and edges centered on a politician
+      parameters:
+      - description: Politician ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.GraphResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Politician-centric subgraph
+      tags:
+      - graph
+  /graph/scandal/{id}:
+    get:
+      description: Returns nodes and edges centered on a scandal
+      parameters:
+      - description: Scandal ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.GraphResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Scandal-centric subgraph
+      tags:
+      - graph
+  /health:
+    get:
+      description: Returns the health status of the API
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: ok
+          schema:
+            type: string
+      summary: Health check endpoint
+      tags:
+      - health
+  /politician/{id}:
+    get:
+      description: Returns full politician profile with all scandal and proceeding
+        connections
+      parameters:
+      - description: Politician ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Politician'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Politician profile
+      tags:
+      - politician
+  /scandal/{id}:
+    get:
+      description: Returns full scandal profile with all politician and organization
+        connections
+      parameters:
+      - description: Scandal ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Scandal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Scandal profile
+      tags:
+      - scandal
+  /search:
+    get:
+      description: Search across politicians, scandals and organizations
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: 'Node type filter: politician|scandal|organization'
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.GraphResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Full-text search
+      tags:
+      - search
+  /timeline:
+    get:
+      description: Returns nodes and edges active within a date range
+      parameters:
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: to
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.GraphResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Timeline-filtered graph
+      tags:
+      - timeline
+swagger: "2.0"

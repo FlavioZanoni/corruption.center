@@ -1,0 +1,528 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "corruption graph api",
+        "title": "⌬ API",
+        "contact": {},
+        "version": "0.1.0"
+    },
+    "basePath": "/api/v1",
+    "paths": {
+        "/graph/expand/{id}": {
+            "get": {
+                "description": "Returns nodes and edges reachable from a node within N hops",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "graph"
+                ],
+                "summary": "Expand a node N hops",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Traversal depth (default 2)",
+                        "name": "hops",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.GraphResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/graph/politician/{id}": {
+            "get": {
+                "description": "Returns nodes and edges centered on a politician",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "graph"
+                ],
+                "summary": "Politician-centric subgraph",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Politician ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.GraphResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/graph/scandal/{id}": {
+            "get": {
+                "description": "Returns nodes and edges centered on a scandal",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "graph"
+                ],
+                "summary": "Scandal-centric subgraph",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Scandal ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.GraphResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/health": {
+            "get": {
+                "description": "Returns the health status of the API",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Health check endpoint",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/politician/{id}": {
+            "get": {
+                "description": "Returns full politician profile with all scandal and proceeding connections",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "politician"
+                ],
+                "summary": "Politician profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Politician ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Politician"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/scandal/{id}": {
+            "get": {
+                "description": "Returns full scandal profile with all politician and organization connections",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "scandal"
+                ],
+                "summary": "Scandal profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Scandal ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Scandal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/search": {
+            "get": {
+                "description": "Search across politicians, scandals and organizations",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "search"
+                ],
+                "summary": "Full-text search",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search query",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Node type filter: politician|scandal|organization",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.GraphResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/timeline": {
+            "get": {
+                "description": "Returns nodes and edges active within a date range",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "timeline"
+                ],
+                "summary": "Timeline-filtered graph",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                        "name": "to",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.GraphResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "models.Edge": {
+            "type": "object",
+            "properties": {
+                "from": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "properties": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "to": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/models.EdgeType"
+                }
+            }
+        },
+        "models.EdgeType": {
+            "type": "string",
+            "enum": [
+                "INVOLVED_IN",
+                "DEFENDANT_IN",
+                "MEMBER_OF",
+                "IMPLICATED_IN",
+                "INVESTIGATES",
+                "RELATED_TO",
+                "SUPPORTS"
+            ],
+            "x-enum-varnames": [
+                "EdgeTypeInvolvedIn",
+                "EdgeTypeDefendantIn",
+                "EdgeTypeMemberOf",
+                "EdgeTypeImplicatedIn",
+                "EdgeTypeInvestigates",
+                "EdgeTypeRelatedTo",
+                "EdgeTypeSupports"
+            ]
+        },
+        "models.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.GraphResponse": {
+            "type": "object",
+            "properties": {
+                "edges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Edge"
+                    }
+                },
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Node"
+                    }
+                }
+            }
+        },
+        "models.Node": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "properties": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "type": {
+                    "$ref": "#/definitions/models.NodeType"
+                }
+            }
+        },
+        "models.NodeType": {
+            "type": "string",
+            "enum": [
+                "politician",
+                "scandal",
+                "organization",
+                "legal_proceeding"
+            ],
+            "x-enum-varnames": [
+                "NodeTypePolitician",
+                "NodeTypeScandal",
+                "NodeTypeOrganization",
+                "NodeTypeLegalProceeding"
+            ]
+        },
+        "models.Politician": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "name_aliases": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "party_current": {
+                    "type": "string"
+                },
+                "photo_url": {
+                    "type": "string"
+                },
+                "role_current": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "tse_profile_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.Scandal": {
+            "type": "object",
+            "properties": {
+                "aliases": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "date_end": {
+                    "type": "string"
+                },
+                "date_start": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "ongoing|concluded|prescribed",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.StatusType"
+                        }
+                    ]
+                },
+                "total_amount_brl": {
+                    "type": "number"
+                },
+                "wikipedia_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.StatusType": {
+            "type": "string",
+            "enum": [
+                "ongoing",
+                "concluded",
+                "prescribed"
+            ],
+            "x-enum-varnames": [
+                "StatusTypeOngoing",
+                "StatusTypeConcluded",
+                "StatusTypePrescribed"
+            ]
+        }
+    }
+}
