@@ -8,6 +8,8 @@ import type {
   ReliabilityFilters,
 } from "@/lib/types"
 
+export type LayoutMode = "force" | "cluster" | "radial" | "timeline"
+
 // ─── Default filter state ─────────────────────────────────────────────────────
 
 const defaultNodeTypeFilters: NodeTypeFilters = {
@@ -61,6 +63,9 @@ interface AppState {
   // Timeline
   timelineRange: TimelineRange
 
+  // Layout
+  layoutMode: LayoutMode
+
   // Actions
   setFilterPanelOpen: (open: boolean) => void
   toggleFilterPanel: () => void
@@ -79,6 +84,8 @@ interface AppState {
   resetFilters: () => void
 
   setTimelineRange: (range: TimelineRange) => void
+
+  setLayoutMode: (mode: LayoutMode) => void
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -91,6 +98,7 @@ export const useAppStore = create<AppState>((set) => ({
   searchQuery: "",
   filters: defaultFilters,
   timelineRange: defaultTimelineRange,
+  layoutMode: "force" as LayoutMode,
 
   setFilterPanelOpen: (open) => set({ isFilterPanelOpen: open }),
   toggleFilterPanel: () =>
@@ -138,4 +146,6 @@ export const useAppStore = create<AppState>((set) => ({
   resetFilters: () => set({ filters: defaultFilters }),
 
   setTimelineRange: (range) => set({ timelineRange: range }),
+
+  setLayoutMode: (mode) => set({ layoutMode: mode }),
 }))

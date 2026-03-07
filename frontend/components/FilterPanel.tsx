@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import type { LayoutMode } from "@/lib/store";
 import { NODE_COLORS } from "@/lib/constants";
 
 // Edge status colors — kept local since they're only used here
@@ -11,6 +12,13 @@ const EDGE_STATUS_COLORS: Record<string, string> = {
   cited: "#ccaa22",
   membership: "#444444",
 };
+
+const LAYOUT_MODES: { id: LayoutMode; label: string }[] = [
+  { id: "force", label: "Orgânico" },
+  { id: "cluster", label: "Clusters" },
+  { id: "radial", label: "Radial" },
+  { id: "timeline", label: "Linha do Tempo" },
+];
 
 function Toggle({
   label,
@@ -78,19 +86,14 @@ export function FilterPanel() {
     setEdgeStatusFilter,
     setReliabilityFilter,
     resetFilters,
+    layoutMode,
+    setLayoutMode,
   } = useAppStore();
 
   return (
     <>
-      {isFilterPanelOpen && (
-        <div
-          className="absolute inset-0 z-30"
-          onClick={() => setFilterPanelOpen(false)}
-        />
-      )}
-
       <div
-        className={`absolute top-0 left-0 bottom-0 z-40 w-64 bg-surface border-r border-border flex flex-col panel-slide-left ${
+        className={`absolute top-0 left-0 bottom-0 z-40 w-sm bg-surface border-r border-border flex flex-col panel-slide-left ${
           isFilterPanelOpen ? "open" : ""
         }`}
       >
@@ -108,6 +111,24 @@ export function FilterPanel() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+          <Section title="Layout">
+            <div className="grid grid-cols-2 gap-1.5">
+              {LAYOUT_MODES.map((mode) => (
+                <button
+                  key={mode.id}
+                  onClick={() => setLayoutMode(mode.id)}
+                  className={`px-2 py-1.5 text-xs font-mono rounded-sm border transition-colors text-left ${
+                    layoutMode === mode.id
+                      ? "bg-[#cc2222] border-[#cc2222] text-white"
+                      : "bg-transparent border-border text-text-muted hover:text-text hover:border-[#444444]"
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          </Section>
+
           <Section title="Tipo de nó">
             <Toggle
               label="Político"

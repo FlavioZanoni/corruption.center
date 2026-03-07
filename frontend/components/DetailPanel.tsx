@@ -14,6 +14,7 @@ import { useAppStore } from "@/lib/store";
 import { fetchExpandGraph } from "@/lib/api/graph";
 import type { GraphNode, GraphEdge } from "@/lib/types";
 import { NODE_COLORS } from "@/lib/constants";
+import { porExtenso, estilo } from "numero-por-extenso";
 
 function NodeIcon({
   type,
@@ -25,7 +26,7 @@ function NodeIcon({
   const props = { size, strokeWidth: 1.5 };
   switch (type) {
     case "politician":
-      return <User {...props} className="text-[#4488ff]" />;
+      return <User {...props} className="text-node-politician" />;
     case "scandal":
       return <AlertTriangle {...props} className="text-[#cc2222]" />;
     case "organization":
@@ -77,13 +78,42 @@ const PROP_LABELS: Record<string, string> = {
   judgment_date: "Julgamento",
   outcome: "Resultado",
   total_amount: "Valor total",
-  total_amount_brl: "Valor total (R$)",
+  total_amount_brl: "Valor total",
   currency: "Moeda",
   confidence: "Confiança",
   tags: "Tags",
   aliases: "Aliases",
   name: "Nome",
 };
+
+// ─── Date formatting ──────────────────────────────────────────────────────────
+
+const DATE_FIELDS = new Set([
+  "birth_date",
+  "start_date",
+  "end_date",
+  "date_start",
+  "date_end",
+  "date_filed",
+  "date_concluded",
+  "date_from",
+  "judgment_date",
+]);
+
+const DATE_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+function formatDate(raw: string): string {
+  // Accept YYYY-MM-DD or YYYY-MM or YYYY
+  const d = new Date(raw.length === 4 ? `${raw}-01-01` : raw.length === 7 ? `${raw}-01` : raw);
+  if (isNaN(d.getTime())) return raw;
+  if (raw.length === 4) return raw; // bare year — no need to expand
+  return DATE_FORMATTER.format(d);
+}
 
 // ─── Money formatting ─────────────────────────────────────────────────────────
 
@@ -97,11 +127,18 @@ const BRL_FORMATTER = new Intl.NumberFormat("pt-BR", {
 // Keys whose values should be rendered as BRL currency
 const MONEY_FIELDS = new Set(["total_amount_brl", "total_amount"]);
 
+function moneyTooltip(raw: string): string {
+  const n = Number(raw.replace(/[^\d.-]/g, ""));
+  if (isNaN(n)) return raw;
+  return porExtenso(n, estilo.monetario);
+}
+
 function formatValue(key: string, raw: string): string {
   if (MONEY_FIELDS.has(key)) {
     const n = Number(raw.replace(/[^\d.-]/g, ""));
     if (!isNaN(n)) return BRL_FORMATTER.format(n);
   }
+  if (DATE_FIELDS.has(key)) return formatDate(raw);
   return PROP_VALUES[raw] ?? raw;
 }
 
@@ -163,6 +200,7 @@ function PropRow({
       </span>
       <span
         className={`text-xs break-all ${MONEY_FIELDS.has(fieldKey) ? "font-mono text-[#e8c97a]" : "text-text"}`}
+        title={MONEY_FIELDS.has(fieldKey) ? moneyTooltip(raw) : undefined}
       >
         {display}
       </span>
@@ -191,7 +229,7 @@ function ConnectedNodeItem({
       onClick={() => onClick(node)}
       className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-[#161616] text-left transition-colors group rounded-sm"
     >
-      <div className="shrink-0 mt-0.5">
+      <div className="shrink-0 mt-0.5 self-center">
         <NodeIcon type={node.type} />
       </div>
       <div className="min-w-0">
@@ -297,7 +335,7 @@ export function DetailPanel() {
   return (
     <>
       <div
-        className={`absolute top-0 right-0 bottom-0 z-40 w-[576px] bg-surface border-l border-border flex flex-col panel-slide-right ${
+        className={`absolute top-0 right-0 bottom-0 z-40 w-xl bg-surface border-l border-border flex flex-col panel-slide-right ${
           isDetailPanelOpen ? "open" : ""
         }`}
       >

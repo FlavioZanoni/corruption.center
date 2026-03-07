@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { GraphLegend } from "./GraphLegend";
 
 const GraphCanvas = dynamic(
   () => import("@/components/GraphCanvas").then((m) => m.GraphCanvas),
@@ -8,5 +9,10 @@ const GraphCanvas = dynamic(
 );
 
 export function GraphCanvasWrapper() {
-  return <GraphCanvas />;
+  return (
+    <>
+      <GraphLegend />
+      <GraphCanvas />
+    </>
+  );
 }
