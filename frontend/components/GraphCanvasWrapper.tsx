@@ -1,12 +1,12 @@
-"use client"
+"use client";
 
-import dynamic from "next/dynamic"
+import dynamic from "next/dynamic";
 
 const GraphCanvas = dynamic(
   () => import("@/components/GraphCanvas").then((m) => m.GraphCanvas),
-  { ssr: false }
-)
+  { ssr: false },
+);
 
 export function GraphCanvasWrapper() {
-  return <GraphCanvas />
+  return <GraphCanvas />;
 }
