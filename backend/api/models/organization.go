@@ -11,9 +11,10 @@ const (
 )
 
 type Organization struct {
-	ID     string  `json:"id"`
-	Name   string  `json:"name"`
-	CNPJ   string  `json:"cnpj"`
-	Type   OrgType `json:"type"`
-	Active bool    `json:"active"`
+	ID      string  `json:"id"`
+	Name    string  `json:"name"`
+	CNPJ    string  `json:"cnpj"`
+	Type    OrgType `json:"type"`
+	LogoURL string  `json:"logo_url,omitempty"`
+	Active  bool    `json:"active"`
 }

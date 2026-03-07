@@ -46,6 +46,19 @@ services:
       memgraph:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - api
+
 volumes:
   postgres_data:
-  memgraph_data: memgraph_data:
+  memgraph_data:

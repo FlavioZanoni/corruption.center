@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+/* ─── Design tokens ─────────────────────────────────────────────────────────── */
+
+@theme inline {
+  --color-bg: #0a0a0a;
+  --color-surface: #111111;
+  --color-border: #222222;
+  --color-text: #e8e8e8;
+  --color-text-muted: #888888;
+  --color-accent-red: #cc2222;
+  --color-accent-orange: #cc7722;
+  --color-accent-yellow: #ccaa22;
+  --color-accent-gray: #444444;
+
+  /* Edge status colors */
+  --color-edge-convicted: #cc2222;
+  --color-edge-indicted: #cc7722;
+  --color-edge-cited: #ccaa22;
+  --color-edge-membership: #444444;
+
+  /* Node type colors */
+  --color-node-politician: #4488ff;
+  --color-node-scandal: #ff4444;
+  --color-node-organization: #33cc88;
+  --color-node-legal: #aa66ff;
+
+  --font-sans: system-ui, sans-serif;
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+}
+
+/* ─── Base reset ─────────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background-color: #0a0a0a;
+  color: #e8e8e8;
+  font-family: system-ui, sans-serif;
+}
+
+/* ─── Scrollbar styling ──────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: #111111;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #444444;
+}
+
+/* ─── Typography utilities ───────────────────────────────────────────────────── */
+
+.font-serif {
+  font-family: var(--font-serif), "Georgia", serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), "Courier New", monospace;
+}
+
+/* ─── Panel transitions ──────────────────────────────────────────────────────── */
+
+.panel-slide-left {
+  transform: translateX(-100%);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.panel-slide-left.open {
+  transform: translateX(0);
+}
+
+.panel-slide-right {
+  transform: translateX(100%);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.panel-slide-right.open {
+  transform: translateX(0);
+}
+
+/* ─── Node pulse animation ───────────────────────────────────────────────────── */
+
+@keyframes node-pulse {
+  0%   { opacity: 1; transform: scale(1); }
+  50%  { opacity: 0.7; transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.node-pulse {
+  animation: node-pulse 0.4s ease-in-out;
+}
+
+/* ─── Search bar glow ────────────────────────────────────────────────────────── */
+
+.search-glow:focus-within {
+  box-shadow: 0 0 0 1px #cc2222, 0 0 12px rgba(204, 34, 34, 0.15);
+}
+
+/* ─── Timeline range slider ──────────────────────────────────────────────────── */
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e8e8e8;
+  border: 2px solid #0a0a0a;
+  margin-top: -5px;
+  cursor: grab;
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+  cursor: grabbing;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  background: #333333;
+  border-radius: 2px;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e8e8e8;
+  border: 2px solid #0a0a0a;
+  cursor: grab;
+}
+
+input[type="range"]::-moz-range-track {
+  height: 3px;
+  background: #333333;
+  border-radius: 2px;
+}

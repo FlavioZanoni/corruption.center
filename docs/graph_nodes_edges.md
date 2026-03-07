@@ -32,6 +32,7 @@
   name: string,
   cnpj: string,
   type: "party|company|shell|ngo|public_agency",
+  logo_url: string,    // optional — URL to org logo; falls back to icon in UI
   active: boolean
 })
 
