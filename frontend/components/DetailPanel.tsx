@@ -15,7 +15,13 @@ import { fetchExpandGraph } from "@/lib/api/graph";
 import type { GraphNode, GraphEdge } from "@/lib/types";
 import { NODE_COLORS } from "@/lib/constants";
 
-function NodeIcon({ type, size = 16 }: { type: GraphNode["type"]; size?: number }) {
+function NodeIcon({
+  type,
+  size = 16,
+}: {
+  type: GraphNode["type"];
+  size?: number;
+}) {
   const props = { size, strokeWidth: 1.5 };
   switch (type) {
     case "politician":
@@ -48,10 +54,12 @@ const EDGE_TYPE_LABELS: Record<string, string> = {
 
 const PROP_LABELS: Record<string, string> = {
   party: "Partido",
-  party_current: "Partido",
-  state: "Estado",
+  party_current: "Partido atual",
+  party_at_time: "Partido na época",
   role: "Cargo",
-  role_current: "Cargo",
+  role_current: "Cargo atual",
+  role_at_time: "Cargo na época",
+  state: "Estado",
   birth_date: "Nascimento",
   start_date: "Início",
   end_date: "Fim",
@@ -132,20 +140,32 @@ function edgeStatusColor(properties: Record<string, unknown>): string {
     case "cited":
       return "#ccaa22";
     default:
-      return "#444444";
+      return "#999999";
   }
 }
 
-function PropRow({ label, value, fieldKey }: { label: string; value: unknown; fieldKey: string }) {
+function PropRow({
+  label,
+  value,
+  fieldKey,
+}: {
+  label: string;
+  value: unknown;
+  fieldKey: string;
+}) {
   if (value === null || value === undefined || value === "") return null;
   const raw = Array.isArray(value) ? value.join(", ") : String(value);
   const display = formatValue(fieldKey, raw);
   return (
     <div className="flex gap-2 py-1.5 border-b border-[#1a1a1a]">
-      <span className="text-[10px] font-mono text-[#888888] uppercase tracking-wider min-w-22.5 shrink-0 pt-0.5">
+      <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider min-w-22.5 shrink-0 pt-0.5">
         {label}
       </span>
-      <span className={`text-xs break-all ${MONEY_FIELDS.has(fieldKey) ? "font-mono text-[#e8c97a]" : "text-[#cccccc]"}`}>{display}</span>
+      <span
+        className={`text-xs break-all ${MONEY_FIELDS.has(fieldKey) ? "font-mono text-[#e8c97a]" : "text-text"}`}
+      >
+        {display}
+      </span>
     </div>
   );
 }
@@ -163,27 +183,59 @@ function ConnectedNodeItem({
     EDGE_TYPE_LABELS[edge.type] ?? edge.type.replace(/_/g, " ").toLowerCase();
   const statusColor = edgeStatusColor(edge.properties);
 
+  const roleAtTime = edge.properties.role_at_time as string | undefined;
+  const partyAtTime = edge.properties.party_at_time as string | undefined;
+
   return (
     <button
       onClick={() => onClick(node)}
-      className="w-full flex items-start gap-2.5 px-3 py-2 hover:bg-[#1a1a1a] text-left transition-colors group rounded-sm"
+      className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-[#161616] text-left transition-colors group rounded-sm"
     >
       <div className="shrink-0 mt-0.5">
         <NodeIcon type={node.type} />
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-serif text-text leading-tight truncate group-hover:text-white">
-          {node.label}
-        </div>
-        <div className="flex items-center gap-1.5 mt-0.5">
+      <div className="min-w-0">
+        {/* Relationship type */}
+        <div className="flex items-center gap-1.5 mb-1">
           <span
             className="w-1.5 h-1.5 rounded-full shrink-0"
             style={{ backgroundColor: statusColor }}
           />
-          <span className="text-[10px] font-mono text-[#888888]">
+          <span
+            className="text-[10px] font-mono uppercase tracking-wider"
+            style={{ color: statusColor }}
+          >
             {edgeLabel}
           </span>
         </div>
+        <div className="text-sm font-serif text-text leading-tight truncate group-hover:text-white">
+          {node.label}
+        </div>
+        {/* Contextual edge fields */}
+        {(roleAtTime || partyAtTime) && (
+          <div className="mt-1.5 space-y-0.5 w-full">
+            {roleAtTime && (
+              <div className="flex gap-2 w-full">
+                <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider shrink-0 ">
+                  Cargo no escândalo:
+                </span>
+                <span className="text-[10px] font-mono text-text">
+                  {roleAtTime}
+                </span>
+              </div>
+            )}
+            {partyAtTime && (
+              <div className="flex gap-2 w-full">
+                <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider shrink-0 ">
+                  Partido no escândalo:
+                </span>
+                <span className="text-[10px] font-mono text-text">
+                  {partyAtTime}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </button>
   );
@@ -263,39 +315,42 @@ export function DetailPanel() {
                     boxShadow: `0 0 0 3px ${ringColor}, 0 0 0 5px #0d0d0d`,
                   }}
                 >
-                   {photoUrl ? (
-                     // eslint-disable-next-line @next/next/no-img-element
-                     <img
-                       src={photoUrl}
-                       alt={node.label}
-                       className="w-full h-full object-cover object-center"
-                     />
-                   ) : (
-                     <div
-                       className="w-full h-full flex items-center justify-center"
-                       style={{ background: `${ringColor}22` }}
-                     >
-                       <NodeIcon type={node.type} size={36} />
-                     </div>
-                   )}
+                  {photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={photoUrl}
+                      alt={node.label}
+                      className="w-full h-full object-cover object-center"
+                    />
+                  ) : (
+                    <div
+                      className="w-full h-full flex items-center justify-center"
+                      style={{ background: `${ringColor}22` }}
+                    >
+                      <NodeIcon type={node.type} size={36} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Title block */}
                 <div className="flex-1 min-w-0 pt-1">
-                  <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: ringColor }}>
+                  <div
+                    className="text-[9px] font-mono uppercase tracking-widest mb-1"
+                    style={{ color: ringColor }}
+                  >
                     {NODE_TYPE_LABELS[node.type] ?? node.type}
                   </div>
                   <h2 className="text-lg font-serif font-semibold text-white leading-snug">
                     {node.label}
                   </h2>
-                  <div className="text-[10px] font-mono text-[#666666] mt-1">
+                  <div className="text-[10px] font-mono text-text-muted mt-1">
                     {node.id}
                   </div>
                 </div>
 
                 <button
                   onClick={closeDetailPanel}
-                  className="shrink-0 text-[#888888] hover:text-white transition-colors mt-1"
+                  className="shrink-0 text-text-muted hover:text-white transition-colors mt-1"
                   aria-label="Fechar painel"
                 >
                   <X size={14} strokeWidth={1.5} />
@@ -305,7 +360,7 @@ export function DetailPanel() {
 
             <div className="flex-1 overflow-y-auto">
               <div className="px-4 py-3">
-                <h3 className="text-[9px] font-mono uppercase tracking-widest text-[#888888] mb-2">
+                <h3 className="text-[9px] font-mono uppercase tracking-widest text-text-muted mb-2">
                   Detalhes e Links
                 </h3>
                 <div className="space-y-0">
@@ -322,19 +377,19 @@ export function DetailPanel() {
                         key !== "active" &&
                         key !== "name",
                     )
-                     .map(([key, value]) => (
-                       <PropRow
-                         key={key}
-                         fieldKey={key}
-                         label={PROP_LABELS[key] ?? key}
-                         value={value}
-                       />
+                    .map(([key, value]) => (
+                      <PropRow
+                        key={key}
+                        fieldKey={key}
+                        label={PROP_LABELS[key] ?? key}
+                        value={value}
+                      />
                     ))}
                 </div>
 
                 {allLinks.length > 0 && (
                   <div className="mt-3 space-y-1">
-                    <h4 className="text-[9px] font-mono uppercase tracking-widest text-[#888888] mb-2">
+                    <h4 className="text-[9px] font-mono uppercase tracking-widest text-text-muted mb-2">
                       Links
                     </h4>
                     {allLinks.map((url, i) => (
@@ -343,7 +398,7 @@ export function DetailPanel() {
                         href={url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 text-xs font-mono text-[#666666] hover:text-[#cc2222] transition-colors truncate"
+                        className="flex items-center gap-1.5 text-xs font-mono text-text-muted hover:text-[#cc2222] transition-colors truncate"
                       >
                         <ExternalLink
                           size={10}
@@ -357,24 +412,22 @@ export function DetailPanel() {
                 )}
               </div>
 
-              <div className="border-t border-[#1a1a1a] mx-4" />
-
               <div className="py-3">
-                <h3 className="text-[9px] font-mono uppercase tracking-widest text-[#888888] mb-2 px-4">
+                <h3 className="text-[9px] font-mono uppercase tracking-widest text-text-muted mb-2 px-4">
                   Conexões{" "}
                   {!isLoading && connectedNodes.length > 0 && (
-                    <span className="text-[#666666]">
+                    <span className="text-text-muted">
                       ({connectedNodes.length})
                     </span>
                   )}
                 </h3>
 
                 {isLoading ? (
-                  <div className="px-4 py-3 text-xs font-mono text-[#666666]">
+                  <div className="px-4 py-3 text-xs font-mono text-text-muted">
                     Carregando...
                   </div>
                 ) : connectedNodes.length === 0 ? (
-                  <div className="px-4 py-3 text-xs font-mono text-[#666666]">
+                  <div className="px-4 py-3 text-xs font-mono text-text-muted">
                     Nenhuma conexão encontrada.
                   </div>
                 ) : (

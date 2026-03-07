@@ -2,6 +2,15 @@
 
 import { X } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { NODE_COLORS } from "@/lib/constants";
+
+// Edge status colors — kept local since they're only used here
+const EDGE_STATUS_COLORS: Record<string, string> = {
+  convicted: "#cc2222",
+  indicted: "#cc7722",
+  cited: "#ccaa22",
+  membership: "#444444",
+};
 
 function Toggle({
   label,
@@ -30,7 +39,7 @@ function Toggle({
           }`}
         />
       </button>
-      <span className="flex items-center gap-1.5 text-sm text-[#aaaaaa] group-hover:text-text transition-colors">
+      <span className="flex items-center gap-1.5 text-sm text-text-muted group-hover:text-text transition-colors">
         {color && (
           <span
             className="w-2 h-2 rounded-full shrink-0"
@@ -52,7 +61,7 @@ function Section({
 }) {
   return (
     <div className="space-y-3">
-      <h3 className="text-[9px] font-mono uppercase tracking-widest text-[#888888]">
+      <h3 className="text-[9px] font-mono uppercase tracking-widest text-text-muted">
         {title}
       </h3>
       <div className="space-y-2.5">{children}</div>
@@ -86,12 +95,12 @@ export function FilterPanel() {
         }`}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[#888888]">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-text-muted">
             Filtros
           </span>
           <button
             onClick={() => setFilterPanelOpen(false)}
-            className="text-[#888888] hover:text-text transition-colors"
+            className="text-text-muted hover:text-text transition-colors"
             aria-label="Fechar filtros"
           >
             <X size={14} strokeWidth={1.5} />
@@ -104,25 +113,25 @@ export function FilterPanel() {
               label="Político"
               checked={filters.nodeTypes.politician}
               onChange={(v) => setNodeTypeFilter("politician", v)}
-              color="#2255cc"
+              color={NODE_COLORS.politician}
             />
             <Toggle
               label="Escândalo"
               checked={filters.nodeTypes.scandal}
               onChange={(v) => setNodeTypeFilter("scandal", v)}
-              color="#cc2222"
+              color={NODE_COLORS.scandal}
             />
             <Toggle
               label="Organização"
               checked={filters.nodeTypes.organization}
               onChange={(v) => setNodeTypeFilter("organization", v)}
-              color="#22aa66"
+              color={NODE_COLORS.organization}
             />
             <Toggle
               label="Processo"
               checked={filters.nodeTypes.legal_proceeding}
               onChange={(v) => setNodeTypeFilter("legal_proceeding", v)}
-              color="#8844cc"
+              color={NODE_COLORS.legal_proceeding}
             />
           </Section>
 
@@ -131,25 +140,25 @@ export function FilterPanel() {
               label="Condenado"
               checked={filters.edgeStatus.convicted}
               onChange={(v) => setEdgeStatusFilter("convicted", v)}
-              color="#cc2222"
+              color={EDGE_STATUS_COLORS.convicted}
             />
             <Toggle
               label="Indiciado"
               checked={filters.edgeStatus.indicted}
               onChange={(v) => setEdgeStatusFilter("indicted", v)}
-              color="#cc7722"
+              color={EDGE_STATUS_COLORS.indicted}
             />
             <Toggle
               label="Citado"
               checked={filters.edgeStatus.cited}
               onChange={(v) => setEdgeStatusFilter("cited", v)}
-              color="#ccaa22"
+              color={EDGE_STATUS_COLORS.cited}
             />
             <Toggle
               label="Membro"
               checked={filters.edgeStatus.membership}
               onChange={(v) => setEdgeStatusFilter("membership", v)}
-              color="#444444"
+              color={EDGE_STATUS_COLORS.membership}
             />
           </Section>
 
@@ -175,7 +184,7 @@ export function FilterPanel() {
         <div className="px-4 py-3 border-t border-border">
           <button
             onClick={resetFilters}
-            className="w-full text-xs font-mono text-[#666666] hover:text-text transition-colors py-1"
+            className="w-full text-xs font-mono text-text-muted hover:text-text transition-colors py-1"
           >
             Redefinir filtros
           </button>

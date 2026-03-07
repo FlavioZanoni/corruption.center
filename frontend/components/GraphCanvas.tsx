@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import * as d3 from "d3";
 import { useAppStore } from "@/lib/store";
@@ -166,8 +166,12 @@ export function GraphCanvas() {
   const { timelineRange, focusedNodeId, filters, selectedNode, setSelectedNode } =
     useAppStore();
 
-  // Keep filtersRef in sync with Zustand state
-  filtersRef.current = filters;
+  // Keep filtersRef in sync with Zustand state (useLayoutEffect avoids the
+  // "cannot update ref during render" lint rule while still running synchronously
+  // before any effects that depend on it)
+  useLayoutEffect(() => {
+    filtersRef.current = filters;
+  });
 
   const { data: timelineData } = useQuery({
     queryKey: ["timeline", timelineRange.from, timelineRange.to],
