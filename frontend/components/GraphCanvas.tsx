@@ -24,8 +24,10 @@ import type {
 const RADII: Record<string, number> = {
   scandal: 24,
   politician: 13,
+  person: 11,
   organization: 11,
   legal_proceeding: 9,
+  source: 7,
 };
 
 // Edge thickness encodes conviction weight — the visual mass tells the story
@@ -54,6 +56,8 @@ const EDGE_COLORS: Record<string, string> = {
   INVOLVED_IN: "#cc6600",
   DEFENDANT_IN: "#cc2222",
   MEMBER_OF: "#334455",
+  CONTROLS: "#2a7f5f",
+  OWNED_BY: "#3f5f88",
   IMPLICATED_IN: "#885522",
   INVESTIGATES: "#553388",
   RELATED_TO: "#555555",
@@ -67,6 +71,8 @@ const EDGE_DISTANCE: Record<string, number> = {
   IMPLICATED_IN: 100,
   INVOLVED_IN: 160,
   MEMBER_OF: 130,
+  CONTROLS: 120,
+  OWNED_BY: 120,
   RELATED_TO: 230,
   default: 140,
 };
@@ -76,6 +82,8 @@ const EDGE_STRENGTH: Record<string, number> = {
   IMPLICATED_IN: 0.6,
   INVOLVED_IN: 0.5,
   MEMBER_OF: 0.4,
+  CONTROLS: 0.5,
+  OWNED_BY: 0.5,
   RELATED_TO: 0.2,
   default: 0.5,
 };
@@ -110,6 +118,11 @@ const LUCIDE_PATHS: Record<string, string> = {
   politician: `
     <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
     <circle cx="12" cy="7" r="4"/>`,
+  person: `
+    <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+    <circle cx="10" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>`,
   scandal: `
     <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>
     <path d="M12 9v4"/>
@@ -126,6 +139,12 @@ const LUCIDE_PATHS: Record<string, string> = {
     <path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"/>
     <path d="m5 8 3 8a5 5 0 0 1-6 0"/>
     <path d="M7 21h10"/>`,
+  source: `
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
+    <line x1="10" y1="9" x2="8" y2="9"/>`,
 };
 
 function iconDataURI(nodeType: string): string {
@@ -137,7 +156,9 @@ function iconDataURI(nodeType: string): string {
 function photoUrl(node: SimNode): string | null {
   const p = node.properties;
   const url =
-    (p.photo_url as string | undefined) ?? (p.logo_url as string | undefined);
+    (p.photo_url as string | undefined) ??
+    (p.image_url as string | undefined) ??
+    (p.logo_url as string | undefined);
   return url && url !== "" ? url : null;
 }
 

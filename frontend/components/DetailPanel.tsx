@@ -5,9 +5,11 @@ import {
   X,
   ExternalLink,
   User,
+  Users,
   AlertTriangle,
   Building2,
   Scale,
+  FileText,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
@@ -27,26 +29,34 @@ function NodeIcon({
   switch (type) {
     case "politician":
       return <User {...props} className="text-node-politician" />;
+    case "person":
+      return <Users {...props} className="text-[#6dbf8f]" />;
     case "scandal":
       return <AlertTriangle {...props} className="text-[#cc2222]" />;
     case "organization":
       return <Building2 {...props} className="text-node-organization" />;
     case "legal_proceeding":
       return <Scale {...props} className="text-node-legal" />;
+    case "source":
+      return <FileText {...props} className="text-[#7a7a7a]" />;
   }
 }
 
 const NODE_TYPE_LABELS: Record<string, string> = {
   politician: "Político",
+  person: "Pessoa",
   scandal: "Escândalo",
   organization: "Organização",
   legal_proceeding: "Processo",
+  source: "Fonte",
 };
 
 const EDGE_TYPE_LABELS: Record<string, string> = {
   INVOLVED_IN: "Envolvido em",
   DEFENDANT_IN: "Réu em",
   MEMBER_OF: "Membro de",
+  CONTROLS: "Controla",
+  OWNED_BY: "Pertence a",
   IMPLICATED_IN: "Implicado em",
   INVESTIGATES: "Investigado por",
   RELATED_TO: "Relacionado a",

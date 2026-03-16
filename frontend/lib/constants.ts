@@ -4,7 +4,9 @@
 
 export const NODE_COLORS: Record<string, string> = {
   politician: "#c8a96e",
+  person: "#6dbf8f",
   scandal: "#e05252",
   organization: "#5b9bd5",
   legal_proceeding: "#8b7ec8",
+  source: "#7a7a7a",
 }

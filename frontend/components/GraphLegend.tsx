@@ -2,8 +2,10 @@ const LEGEND_ENTRIES = [
   // node types
   { kind: "node", color: "#e05252", label: "Escândalo" },
   { kind: "node", color: "#c8a96e", label: "Político" },
+  { kind: "node", color: "#6dbf8f", label: "Pessoa" },
   { kind: "node", color: "#5b9bd5", label: "Organização" },
   { kind: "node", color: "#8b7ec8", label: "Processo judicial" },
+  { kind: "node", color: "#7a7a7a", label: "Fonte" },
   // edge statuses
   {
     kind: "edge",
@@ -32,14 +34,14 @@ const LEGEND_ENTRIES = [
     color: "#555555",
     width: 1.0,
     dash: true,
-    label: "Escândalos rel.",
+    label: "Escândalos relacionados",
   },
 ] as const;
 
 export function GraphLegend() {
   return (
     <div className="absolute bottom-16 left-10 z-50 flex flex-col gap-1 rounded-md border border-white/10 bg-black/70 px-3 py-2.5 backdrop-blur-sm">
-      <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-white/40">
+      <p className="mb-1 text-sm font-medium uppercase tracking-widest text-white/40">
         Legenda
       </p>
 
@@ -64,9 +66,7 @@ export function GraphLegend() {
                 />
               </svg>
             )}
-            <span className="text-[10px] text-white/60 font-mono">
-              {e.label}
-            </span>
+            <span className="text-md text-white/60 font-mono">{e.label}</span>
           </div>
         ))}
       </div>

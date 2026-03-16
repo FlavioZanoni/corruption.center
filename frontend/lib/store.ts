@@ -14,9 +14,11 @@ export type LayoutMode = "force" | "cluster" | "radial" | "timeline"
 
 const defaultNodeTypeFilters: NodeTypeFilters = {
   politician: true,
+  person: true,
   scandal: true,
   organization: true,
   legal_proceeding: true,
+  source: true,
 }
 
 const defaultEdgeStatusFilters: EdgeStatusFilters = {

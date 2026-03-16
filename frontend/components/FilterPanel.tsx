@@ -137,6 +137,12 @@ export function FilterPanel() {
               color={NODE_COLORS.politician}
             />
             <Toggle
+              label="Pessoa"
+              checked={filters.nodeTypes.person}
+              onChange={(v) => setNodeTypeFilter("person", v)}
+              color={NODE_COLORS.person}
+            />
+            <Toggle
               label="Escândalo"
               checked={filters.nodeTypes.scandal}
               onChange={(v) => setNodeTypeFilter("scandal", v)}
@@ -153,6 +159,12 @@ export function FilterPanel() {
               checked={filters.nodeTypes.legal_proceeding}
               onChange={(v) => setNodeTypeFilter("legal_proceeding", v)}
               color={NODE_COLORS.legal_proceeding}
+            />
+            <Toggle
+              label="Fonte"
+              checked={filters.nodeTypes.source}
+              onChange={(v) => setNodeTypeFilter("source", v)}
+              color={NODE_COLORS.source}
             />
           </Section>
 

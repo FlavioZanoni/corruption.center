@@ -1,11 +1,19 @@
 // ─── Core graph types ────────────────────────────────────────────────────────
 
-export type NodeType = "politician" | "scandal" | "organization" | "legal_proceeding"
+export type NodeType =
+  | "politician"
+  | "person"
+  | "scandal"
+  | "organization"
+  | "legal_proceeding"
+  | "source"
 
 export type EdgeType =
   | "INVOLVED_IN"
   | "DEFENDANT_IN"
   | "MEMBER_OF"
+  | "CONTROLS"
+  | "OWNED_BY"
   | "IMPLICATED_IN"
   | "INVESTIGATES"
   | "RELATED_TO"
@@ -108,9 +116,11 @@ export interface TimelineResponse extends GraphResponse {
 
 export interface NodeTypeFilters {
   politician: boolean
+  person: boolean
   scandal: boolean
   organization: boolean
   legal_proceeding: boolean
+  source: boolean
 }
 
 export interface EdgeStatusFilters {
