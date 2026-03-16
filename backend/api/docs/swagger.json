@@ -1,7 +1,7 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "corruption graph api",
+        "description": "Corruption graph api",
         "title": "⌬ API",
         "contact": {},
         "version": "0.1.0"
@@ -259,7 +259,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "Node type filter: politician|scandal|organization",
+                        "description": "Node type filter: politician|person|scandal|organization",
                         "name": "type",
                         "in": "query"
                     }
@@ -363,6 +363,8 @@
                 "INVOLVED_IN",
                 "DEFENDANT_IN",
                 "MEMBER_OF",
+                "CONTROLS",
+                "OWNED_BY",
                 "IMPLICATED_IN",
                 "INVESTIGATES",
                 "RELATED_TO",
@@ -372,6 +374,8 @@
                 "EdgeTypeInvolvedIn",
                 "EdgeTypeDefendantIn",
                 "EdgeTypeMemberOf",
+                "EdgeTypeControls",
+                "EdgeTypeOwnedBy",
                 "EdgeTypeImplicatedIn",
                 "EdgeTypeInvestigates",
                 "EdgeTypeRelatedTo",
@@ -425,15 +429,19 @@
             "type": "string",
             "enum": [
                 "politician",
+                "person",
                 "scandal",
                 "organization",
-                "legal_proceeding"
+                "legal_proceeding",
+                "source"
             ],
             "x-enum-varnames": [
                 "NodeTypePolitician",
+                "NodeTypePerson",
                 "NodeTypeScandal",
                 "NodeTypeOrganization",
-                "NodeTypeLegalProceeding"
+                "NodeTypeLegalProceeding",
+                "NodeTypeSource"
             ]
         },
         "models.Politician": {
@@ -441,6 +449,9 @@
             "properties": {
                 "active": {
                     "type": "boolean"
+                },
+                "cpf": {
+                    "type": "string"
                 },
                 "id": {
                     "type": "string"

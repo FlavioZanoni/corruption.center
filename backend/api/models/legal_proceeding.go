@@ -22,6 +22,7 @@ type LegalProceeding struct {
 	Court         string           `json:"court"`
 	Type          ProceedingType   `json:"type"`
 	Status        ProceedingStatus `json:"status"`
+	Assuntos      []string         `json:"assuntos"`
 	DateFiled     time.Time        `json:"date_filed"`
 	DateConcluded *time.Time       `json:"date_concluded"`
 	URL           string           `json:"url"`

@@ -4,9 +4,11 @@ type NodeType string
 
 const (
 	NodeTypePolitician      NodeType = "politician"
+	NodeTypePerson          NodeType = "person"
 	NodeTypeScandal         NodeType = "scandal"
 	NodeTypeOrganization    NodeType = "organization"
 	NodeTypeLegalProceeding NodeType = "legal_proceeding"
+	NodeTypeSource          NodeType = "source"
 )
 
 type EdgeType string
@@ -15,6 +17,8 @@ const (
 	EdgeTypeInvolvedIn   EdgeType = "INVOLVED_IN"
 	EdgeTypeDefendantIn  EdgeType = "DEFENDANT_IN"
 	EdgeTypeMemberOf     EdgeType = "MEMBER_OF"
+	EdgeTypeControls     EdgeType = "CONTROLS"
+	EdgeTypeOwnedBy      EdgeType = "OWNED_BY"
 	EdgeTypeImplicatedIn EdgeType = "IMPLICATED_IN"
 	EdgeTypeInvestigates EdgeType = "INVESTIGATES"
 	EdgeTypeRelatedTo    EdgeType = "RELATED_TO"

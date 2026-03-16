@@ -266,7 +266,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Node type filter: politician|scandal|organization",
+                        "description": "Node type filter: politician|person|scandal|organization",
                         "name": "type",
                         "in": "query"
                     }
@@ -370,6 +370,8 @@ const docTemplate = `{
                 "INVOLVED_IN",
                 "DEFENDANT_IN",
                 "MEMBER_OF",
+                "CONTROLS",
+                "OWNED_BY",
                 "IMPLICATED_IN",
                 "INVESTIGATES",
                 "RELATED_TO",
@@ -379,6 +381,8 @@ const docTemplate = `{
                 "EdgeTypeInvolvedIn",
                 "EdgeTypeDefendantIn",
                 "EdgeTypeMemberOf",
+                "EdgeTypeControls",
+                "EdgeTypeOwnedBy",
                 "EdgeTypeImplicatedIn",
                 "EdgeTypeInvestigates",
                 "EdgeTypeRelatedTo",
@@ -432,15 +436,19 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "politician",
+                "person",
                 "scandal",
                 "organization",
-                "legal_proceeding"
+                "legal_proceeding",
+                "source"
             ],
             "x-enum-varnames": [
                 "NodeTypePolitician",
+                "NodeTypePerson",
                 "NodeTypeScandal",
                 "NodeTypeOrganization",
-                "NodeTypeLegalProceeding"
+                "NodeTypeLegalProceeding",
+                "NodeTypeSource"
             ]
         },
         "models.Politician": {
@@ -448,6 +456,9 @@ const docTemplate = `{
             "properties": {
                 "active": {
                     "type": "boolean"
+                },
+                "cpf": {
+                    "type": "string"
                 },
                 "id": {
                     "type": "string"
@@ -541,7 +552,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "⌬ API",
-	Description:      "corruption graph api",
+	Description:      "Corruption graph api",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

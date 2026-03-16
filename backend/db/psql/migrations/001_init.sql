@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS pending_review (
                  'unknown_cpf',             -- DataJud found a case party CPF not in DB
                  'unknown_cnpj',            -- DataJud found a case party CNPJ not in DB
                  'cpf_partial_match',       -- masked CPF loosely matches a Politician
-                 'cnpj_controls_politician',-- politician appears in org QSA
+                 'cpf_controls_politician', -- possible masked CPF match to a Politician from QSA
                  'scandal_cluster',         -- watcher detected potential new scandal
                  'unlinked_spinoff'         -- new case with no processoRelacionado
                )),

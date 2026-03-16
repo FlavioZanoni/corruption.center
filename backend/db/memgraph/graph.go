@@ -3,11 +3,13 @@ package memgraph
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"corruption-center/api/models"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
 )
 
 func (db *DB) QueryScandalGraph(ctx context.Context, id string) (*models.GraphResponse, error) {
@@ -127,16 +129,23 @@ func (db *DB) QueryScandal(ctx context.Context, id string) (*models.Scandal, err
 func collectGraph(ctx context.Context, result neo4j.ResultWithContext) (*models.GraphResponse, error) {
 	nodeMap := map[string]models.Node{}
 	edgeMap := map[string]models.Edge{}
+	elementToDomainID := map[string]string{}
 
 	for result.Next(ctx) {
 		record := result.Record()
+
 		for _, val := range record.Values {
-			switch v := val.(type) {
-			case neo4j.Node:
+			if v, ok := val.(neo4j.Node); ok {
 				n := neoNodeToModel(v)
 				nodeMap[n.ID] = n
+				elementToDomainID[v.ElementId] = n.ID
+			}
+		}
+
+		for _, val := range record.Values {
+			switch v := val.(type) {
 			case neo4j.Relationship:
-				e := neoRelToModel(v)
+				e := neoRelToModel(v, elementToDomainID)
 				edgeMap[e.ID] = e
 			}
 		}
@@ -167,22 +176,37 @@ func neoNodeToModel(n neo4j.Node) models.Node {
 	}
 
 	id, _ := n.Props["id"].(string)
-	name, _ := n.Props["name"].(string)
+	name := strProp(n.Props, "name")
+	if name == "" {
+		name = strProp(n.Props, "case_number")
+	}
+	if name == "" {
+		name = id
+	}
 
 	return models.Node{
 		ID:         id,
-		Type:       models.NodeType(label),
+		Type:       labelToNodeType(label),
 		Label:      name,
 		Properties: n.Props,
 	}
 }
 
-func neoRelToModel(r neo4j.Relationship) models.Edge {
+func neoRelToModel(r neo4j.Relationship, elementToDomainID map[string]string) models.Edge {
 	id := fmt.Sprintf("%s", r.ElementId)
+	from := fmt.Sprintf("%s", r.StartElementId)
+	to := fmt.Sprintf("%s", r.EndElementId)
+	if mapped, ok := elementToDomainID[r.StartElementId]; ok {
+		from = mapped
+	}
+	if mapped, ok := elementToDomainID[r.EndElementId]; ok {
+		to = mapped
+	}
+
 	return models.Edge{
 		ID:         id,
-		From:       fmt.Sprintf("%s", r.StartElementId),
-		To:         fmt.Sprintf("%s", r.EndElementId),
+		From:       from,
+		To:         to,
 		Type:       models.EdgeType(r.Type),
 		Properties: r.Props,
 	}
@@ -190,11 +214,11 @@ func neoRelToModel(r neo4j.Relationship) models.Edge {
 
 func nodeToPolit(n neo4j.Node) *models.Politician {
 	p := n.Props
-	aliases, _ := p["name_aliases"].([]string)
 	return &models.Politician{
 		ID:            strProp(p, "id"),
 		Name:          strProp(p, "name"),
-		NameAliases:   aliases,
+		CPF:           strProp(p, "cpf"),
+		NameAliases:   strSliceProp(p, "name_aliases"),
 		PartyCurrent:  strProp(p, "party_current"),
 		RoleCurrent:   strProp(p, "role_current"),
 		State:         strProp(p, "state"),
@@ -206,21 +230,61 @@ func nodeToPolit(n neo4j.Node) *models.Politician {
 
 func nodeToScandal(n neo4j.Node) *models.Scandal {
 	p := n.Props
-	aliases, _ := p["aliases"].([]string)
 	return &models.Scandal{
 		ID:             strProp(p, "id"),
 		Name:           strProp(p, "name"),
-		Aliases:        aliases,
+		Aliases:        strSliceProp(p, "aliases"),
 		Description:    strProp(p, "description"),
+		DateStart:      timeProp(p, "date_start"),
+		DateEnd:        timePtrProp(p, "date_end"),
 		TotalAmountBRL: float64Prop(p, "total_amount_brl"),
 		Status:         models.StatusType(strProp(p, "status")),
 		WikipediaURL:   strProp(p, "wikipedia_url"),
 	}
 }
 
+func labelToNodeType(label string) models.NodeType {
+	switch strings.ToLower(label) {
+	case "politician":
+		return models.NodeTypePolitician
+	case "person":
+		return models.NodeTypePerson
+	case "scandal":
+		return models.NodeTypeScandal
+	case "organization":
+		return models.NodeTypeOrganization
+	case "legalproceeding":
+		return models.NodeTypeLegalProceeding
+	case "source":
+		return models.NodeTypeSource
+	default:
+		return models.NodeType(strings.ToLower(label))
+	}
+}
+
 func strProp(p map[string]any, key string) string {
 	v, _ := p[key].(string)
 	return v
+}
+
+func strSliceProp(p map[string]any, key string) []string {
+	v, ok := p[key]
+	if !ok || v == nil {
+		return nil
+	}
+	if vv, ok := v.([]string); ok {
+		return vv
+	}
+	if vv, ok := v.([]any); ok {
+		out := make([]string, 0, len(vv))
+		for _, item := range vv {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 func boolProp(p map[string]any, key string) bool {
@@ -231,4 +295,46 @@ func boolProp(p map[string]any, key string) bool {
 func float64Prop(p map[string]any, key string) float64 {
 	v, _ := p[key].(float64)
 	return v
+}
+
+func timeProp(p map[string]any, key string) time.Time {
+	v, ok := p[key]
+	if !ok || v == nil {
+		return time.Time{}
+	}
+	if t, ok := toTime(v); ok {
+		return t
+	}
+	return time.Time{}
+}
+
+func timePtrProp(p map[string]any, key string) *time.Time {
+	v, ok := p[key]
+	if !ok || v == nil {
+		return nil
+	}
+	t, ok := toTime(v)
+	if !ok {
+		return nil
+	}
+	return &t
+}
+
+func toTime(v any) (time.Time, bool) {
+	switch t := v.(type) {
+	case time.Time:
+		return t, true
+	case dbtype.Date:
+		return t.Time(), true
+	case string:
+		parsed, err := time.Parse("2006-01-02", t)
+		if err == nil {
+			return parsed, true
+		}
+		parsed, err = time.Parse(time.RFC3339, t)
+		if err == nil {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
 }

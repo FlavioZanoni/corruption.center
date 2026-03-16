@@ -19,6 +19,8 @@ definitions:
     - INVOLVED_IN
     - DEFENDANT_IN
     - MEMBER_OF
+    - CONTROLS
+    - OWNED_BY
     - IMPLICATED_IN
     - INVESTIGATES
     - RELATED_TO
@@ -28,6 +30,8 @@ definitions:
     - EdgeTypeInvolvedIn
     - EdgeTypeDefendantIn
     - EdgeTypeMemberOf
+    - EdgeTypeControls
+    - EdgeTypeOwnedBy
     - EdgeTypeImplicatedIn
     - EdgeTypeInvestigates
     - EdgeTypeRelatedTo
@@ -63,19 +67,25 @@ definitions:
   models.NodeType:
     enum:
     - politician
+    - person
     - scandal
     - organization
     - legal_proceeding
+    - source
     type: string
     x-enum-varnames:
     - NodeTypePolitician
+    - NodeTypePerson
     - NodeTypeScandal
     - NodeTypeOrganization
     - NodeTypeLegalProceeding
+    - NodeTypeSource
   models.Politician:
     properties:
       active:
         type: boolean
+      cpf:
+        type: string
       id:
         type: string
       name:
@@ -132,7 +142,7 @@ definitions:
     - StatusTypePrescribed
 info:
   contact: {}
-  description: corruption graph api
+  description: Corruption graph api
   title: ⌬ API
   version: 0.1.0
 paths:
@@ -299,7 +309,7 @@ paths:
         name: q
         required: true
         type: string
-      - description: 'Node type filter: politician|scandal|organization'
+      - description: 'Node type filter: politician|person|scandal|organization'
         in: query
         name: type
         type: string

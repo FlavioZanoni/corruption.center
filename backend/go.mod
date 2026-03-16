@@ -2,7 +2,10 @@ module corruption-center
 
 go 1.25.5
 
-require github.com/gin-gonic/gin v1.12.0
+require (
+	github.com/gin-gonic/gin v1.12.0
+	github.com/swaggo/swag v1.16.4
+)
 
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
@@ -17,7 +20,6 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
-	github.com/swaggo/swag v1.8.12 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/tools v0.41.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

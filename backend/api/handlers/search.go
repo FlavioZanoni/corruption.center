@@ -21,7 +21,7 @@ func NewSearchHandler(service services.SearchService) *SearchHandler {
 // @Tags         search
 // @Produce      json
 // @Param        q     query     string  true   "Search query"
-// @Param        type  query     string  false  "Node type filter: politician|scandal|organization"
+// @Param        type  query     string  false  "Node type filter: politician|person|scandal|organization"
 // @Success      200   {object}  models.GraphResponse
 // @Failure      400   {object}  models.ErrorResponse
 // @Failure      500   {object}  models.ErrorResponse

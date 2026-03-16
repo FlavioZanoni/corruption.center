@@ -18,6 +18,8 @@ func (db *DB) QuerySearch(ctx context.Context, q string, nodeType string) (*mode
 	switch nodeType {
 	case "politician":
 		result, err = searchPoliticians(ctx, session, q)
+	case "person":
+		result, err = searchPersons(ctx, session, q)
 	case "scandal":
 		result, err = searchScandals(ctx, session, q)
 	case "organization":
@@ -32,6 +34,18 @@ func (db *DB) QuerySearch(ctx context.Context, q string, nodeType string) (*mode
 	}
 
 	return collectGraph(ctx, result)
+}
+
+func searchPersons(ctx context.Context, session neo4j.SessionWithContext, q string) (neo4j.ResultWithContext, error) {
+	return session.Run(ctx, `
+    CALL db.index.fulltext.queryNodes("person_fulltext", $q)
+    YIELD node, score
+    OPTIONAL MATCH (node)-[r:INVOLVED_IN]->(s:Scandal)
+    OPTIONAL MATCH (node)-[d:DEFENDANT_IN]->(lp:LegalProceeding)
+    RETURN node, r, s, d, lp
+    ORDER BY score DESC
+    LIMIT 20
+  `, map[string]any{"q": q})
 }
 
 func searchPoliticians(ctx context.Context, session neo4j.SessionWithContext, q string) (neo4j.ResultWithContext, error) {
