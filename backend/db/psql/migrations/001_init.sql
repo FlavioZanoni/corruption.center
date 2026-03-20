@@ -10,6 +10,23 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   UNIQUE (target, filename)
 );
 
+-- ─── Sources cache ────────────────────────────────────────────────────────────
+-- Raw source payloads and metadata captured by workers.
+
+CREATE TABLE IF NOT EXISTS sources (
+  id             TEXT PRIMARY KEY,
+  url            TEXT NOT NULL UNIQUE,
+  title          TEXT NOT NULL,
+  publisher      TEXT NOT NULL,
+  type           TEXT NOT NULL,
+  reliability    TEXT NOT NULL,
+  date_published TIMESTAMPTZ,
+  date_scraped   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  raw_content    TEXT,
+  checksum       TEXT,
+  active         BOOLEAN NOT NULL DEFAULT true
+);
+
 -- ─── Worker job log ───────────────────────────────────────────────────────────
 -- One row per worker run. Used for monitoring, debugging, and skipping
 -- duplicate runs.
@@ -88,7 +105,7 @@ CREATE TABLE IF NOT EXISTS pending_review (
                  'unknown_cpf',             -- DataJud found a case party CPF not in DB
                  'unknown_cnpj',            -- DataJud found a case party CNPJ not in DB
                  'cpf_partial_match',       -- masked CPF loosely matches a Politician
-                 'cpf_controls_politician', -- possible masked CPF match to a Politician from QSA
+                 'possible_politician_in_qsa',-- masked CPF in QSA loosely matches a Politician node, needs human confirmation
                  'scandal_cluster',         -- watcher detected potential new scandal
                  'unlinked_spinoff'         -- new case with no processoRelacionado
                )),
@@ -119,6 +136,10 @@ CREATE TABLE IF NOT EXISTS tse_import_log (
 
 CREATE INDEX IF NOT EXISTS idx_scraper_jobs_worker      ON scraper_jobs (worker);
 CREATE INDEX IF NOT EXISTS idx_scraper_jobs_status      ON scraper_jobs (status);
+
+CREATE INDEX IF NOT EXISTS idx_sources_url              ON sources (url);
+CREATE INDEX IF NOT EXISTS idx_sources_active           ON sources (active);
+CREATE INDEX IF NOT EXISTS idx_sources_publisher        ON sources (publisher);
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_target         ON audit_log (target_type, target_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_actor          ON audit_log (actor_id);

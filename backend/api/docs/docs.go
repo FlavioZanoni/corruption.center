@@ -166,7 +166,7 @@ const docTemplate = `{
         },
         "/politician/{id}": {
             "get": {
-                "description": "Returns full politician profile with all scandal and proceeding connections",
+                "description": "Returns full politician profile with all graph connections",
                 "produces": [
                     "application/json"
                 ],
@@ -187,7 +187,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Politician"
+                            "$ref": "#/definitions/models.PoliticianProfileResponse"
                         }
                     },
                     "404": {
@@ -207,7 +207,7 @@ const docTemplate = `{
         },
         "/scandal/{id}": {
             "get": {
-                "description": "Returns full scandal profile with all politician and organization connections",
+                "description": "Returns full scandal profile with all graph connections",
                 "produces": [
                     "application/json"
                 ],
@@ -228,7 +228,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Scandal"
+                            "$ref": "#/definitions/models.ScandalProfileResponse"
                         }
                     },
                     "404": {
@@ -484,8 +484,22 @@ const docTemplate = `{
                 "state": {
                     "type": "string"
                 },
-                "tse_profile_url": {
-                    "type": "string"
+                "tse_profile_urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.PoliticianProfileResponse": {
+            "type": "object",
+            "properties": {
+                "connections": {
+                    "$ref": "#/definitions/models.GraphResponse"
+                },
+                "politician": {
+                    "$ref": "#/definitions/models.Politician"
                 }
             }
         },
@@ -526,6 +540,17 @@ const docTemplate = `{
                 },
                 "wikipedia_url": {
                     "type": "string"
+                }
+            }
+        },
+        "models.ScandalProfileResponse": {
+            "type": "object",
+            "properties": {
+                "connections": {
+                    "$ref": "#/definitions/models.GraphResponse"
+                },
+                "scandal": {
+                    "$ref": "#/definitions/models.Scandal"
                 }
             }
         },

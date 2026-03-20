@@ -5,10 +5,8 @@ import { DetailPanel } from "@/components/DetailPanel";
 import { GraphCanvasWrapper } from "@/components/GraphCanvasWrapper";
 
 export default function Home() {
-  const isMock =
-    !process.env.NEXT_PUBLIC_API_URL ||
-    new URL(process.env.NEXT_PUBLIC_API_URL, window.location.origin).origin ===
-      window.location.origin;
+  const apiURL = process.env.NEXT_PUBLIC_API_URL?.trim() ?? "";
+  const isMock = apiURL === "" || apiURL.startsWith("/");
 
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-bg">

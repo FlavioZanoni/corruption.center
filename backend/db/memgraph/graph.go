@@ -19,9 +19,15 @@ func (db *DB) QueryScandalGraph(ctx context.Context, id string) (*models.GraphRe
 	result, err := session.Run(ctx, `
     MATCH (s:Scandal {id: $id})
     OPTIONAL MATCH (p:Politician)-[r:INVOLVED_IN]->(s)
+    OPTIONAL MATCH (person:Person)-[pr:INVOLVED_IN]->(s)
     OPTIONAL MATCH (o:Organization)-[ri:IMPLICATED_IN]->(s)
+    OPTIONAL MATCH (s)-[rel:RELATED_TO]-(s2:Scandal)
     OPTIONAL MATCH (lp:LegalProceeding)-[inv:INVESTIGATES]->(s)
-    RETURN s, p, r, o, ri, lp, inv
+    OPTIONAL MATCH (p2:Politician)-[d1:DEFENDANT_IN]->(lp)
+    OPTIONAL MATCH (person2:Person)-[d2:DEFENDANT_IN]->(lp)
+    OPTIONAL MATCH (o2:Organization)-[d3:DEFENDANT_IN]->(lp)
+    OPTIONAL MATCH (src:Source)-[sup:SUPPORTS]->(s)
+    RETURN s, p, r, person, pr, o, ri, s2, rel, lp, inv, p2, d1, person2, d2, o2, d3, src, sup
   `, map[string]any{"id": id})
 	if err != nil {
 		return nil, fmt.Errorf("memgraph: query scandal graph: %w", err)
@@ -39,7 +45,8 @@ func (db *DB) QueryPoliticianGraph(ctx context.Context, id string) (*models.Grap
     OPTIONAL MATCH (p)-[r:INVOLVED_IN]->(s:Scandal)
     OPTIONAL MATCH (p)-[d:DEFENDANT_IN]->(lp:LegalProceeding)
     OPTIONAL MATCH (p)-[m:MEMBER_OF]->(o:Organization)
-    RETURN p, r, s, d, lp, m, o
+    OPTIONAL MATCH (p)-[c:CONTROLS]->(o2:Organization)
+    RETURN p, r, s, d, lp, m, o, c, o2
   `, map[string]any{"id": id})
 	if err != nil {
 		return nil, fmt.Errorf("memgraph: query politician graph: %w", err)
@@ -215,16 +222,16 @@ func neoRelToModel(r neo4j.Relationship, elementToDomainID map[string]string) mo
 func nodeToPolit(n neo4j.Node) *models.Politician {
 	p := n.Props
 	return &models.Politician{
-		ID:            strProp(p, "id"),
-		Name:          strProp(p, "name"),
-		CPF:           strProp(p, "cpf"),
-		NameAliases:   strSliceProp(p, "name_aliases"),
-		PartyCurrent:  strProp(p, "party_current"),
-		RoleCurrent:   strProp(p, "role_current"),
-		State:         strProp(p, "state"),
-		TSEProfileURL: strProp(p, "tse_profile_url"),
-		PhotoURL:      strProp(p, "photo_url"),
-		Active:        boolProp(p, "active"),
+		ID:             strProp(p, "id"),
+		Name:           strProp(p, "name"),
+		CPF:            strProp(p, "cpf"),
+		NameAliases:    strSliceProp(p, "name_aliases"),
+		PartyCurrent:   strProp(p, "party_current"),
+		RoleCurrent:    strProp(p, "role_current"),
+		State:          strProp(p, "state"),
+		TSEProfileURLs: strSliceProp(p, "tse_profile_urls"),
+		PhotoURL:       strProp(p, "photo_url"),
+		Active:         boolProp(p, "active"),
 	}
 }
 

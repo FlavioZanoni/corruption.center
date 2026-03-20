@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"corruption-center/api/models"
 	"corruption-center/api/services"
 	"github.com/gin-gonic/gin"
 )
@@ -17,11 +18,11 @@ func NewPoliticianHandler(service services.GraphService) *PoliticianHandler {
 
 // GetPolitician godoc
 // @Summary      Politician profile
-// @Description  Returns full politician profile with all scandal and proceeding connections
+// @Description  Returns full politician profile with all graph connections
 // @Tags         politician
 // @Produce      json
 // @Param        id   path      string  true  "Politician ID"
-// @Success      200  {object}  models.Politician
+// @Success      200  {object}  models.PoliticianProfileResponse
 // @Failure      404  {object}  models.ErrorResponse
 // @Failure      500  {object}  models.ErrorResponse
 // @Router       /politician/{id} [get]
@@ -38,5 +39,14 @@ func (h *PoliticianHandler) GetPolitician(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, politician)
+	connections, err := h.service.GetPoliticianGraph(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.PoliticianProfileResponse{
+		Politician:  politician,
+		Connections: connections,
+	})
 }

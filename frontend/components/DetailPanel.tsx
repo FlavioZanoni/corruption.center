@@ -331,7 +331,8 @@ export function DetailPanel() {
     (properties.photo_url as string | undefined) ??
     (properties.logo_url as string | undefined);
 
-  const tseUrl = properties.tse_profile_url as string | undefined;
+  const tseUrls = properties.tse_profile_urls as string[] | undefined;
+  const tseUrl = tseUrls?.[0];
   const wikipediaUrl = properties.wikipedia_url as string | undefined;
   const sourceUrls = (properties.source_urls as string[] | undefined) ?? [];
   const allLinks = [
@@ -419,7 +420,7 @@ export function DetailPanel() {
                         key !== "logo_url" &&
                         key !== "source_urls" &&
                         key !== "name_aliases" &&
-                        key !== "tse_profile_url" &&
+                        key !== "tse_profile_urls" &&
                         key !== "wikipedia_url" &&
                         key !== "url" &&
                         key !== "active" &&

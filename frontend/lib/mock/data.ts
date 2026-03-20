@@ -20,7 +20,7 @@ export const MOCK_GRAPH: GraphResponse = {
         role_current: "Presidente da República",
         active: true,
         photo_url: "https://avatars.githubusercontent.com/u/67586641?s=400&u=715d9005673d3130d37ec0525aab57146cd788b6&v=4",
-        tse_profile_url: "https://www.tse.jus.br/",
+        tse_profile_urls: ["https://www.tse.jus.br/"],
         wikipedia_url: "https://pt.wikipedia.org/wiki/Lula",
       },
     },

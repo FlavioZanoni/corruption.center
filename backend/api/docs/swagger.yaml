@@ -102,8 +102,17 @@ definitions:
         type: string
       state:
         type: string
-      tse_profile_url:
-        type: string
+      tse_profile_urls:
+        items:
+          type: string
+        type: array
+    type: object
+  models.PoliticianProfileResponse:
+    properties:
+      connections:
+        $ref: '#/definitions/models.GraphResponse'
+      politician:
+        $ref: '#/definitions/models.Politician'
     type: object
   models.Scandal:
     properties:
@@ -129,6 +138,13 @@ definitions:
         type: number
       wikipedia_url:
         type: string
+    type: object
+  models.ScandalProfileResponse:
+    properties:
+      connections:
+        $ref: '#/definitions/models.GraphResponse'
+      scandal:
+        $ref: '#/definitions/models.Scandal'
     type: object
   models.StatusType:
     enum:
@@ -246,8 +262,7 @@ paths:
       - health
   /politician/{id}:
     get:
-      description: Returns full politician profile with all scandal and proceeding
-        connections
+      description: Returns full politician profile with all graph connections
       parameters:
       - description: Politician ID
         in: path
@@ -260,7 +275,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Politician'
+            $ref: '#/definitions/models.PoliticianProfileResponse'
         "404":
           description: Not Found
           schema:
@@ -274,8 +289,7 @@ paths:
       - politician
   /scandal/{id}:
     get:
-      description: Returns full scandal profile with all politician and organization
-        connections
+      description: Returns full scandal profile with all graph connections
       parameters:
       - description: Scandal ID
         in: path
@@ -288,7 +302,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Scandal'
+            $ref: '#/definitions/models.ScandalProfileResponse'
         "404":
           description: Not Found
           schema:

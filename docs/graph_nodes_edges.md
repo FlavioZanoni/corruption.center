@@ -11,9 +11,9 @@
   party_current: string,
   role_current: string,       // current role today
   state: string,
-  tse_profile_url: string,
+  tse_profile_urls: [string],  // one entry per election year
   photo_url: string,
-  active: boolean
+  active: boolean              // false from TSE import; set true by Câmara/Senado sync
 })
 
 (:Person {

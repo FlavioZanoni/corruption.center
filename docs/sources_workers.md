@@ -6,27 +6,32 @@
 
 **Responsibility**
 Imports historical winners of federal elections from TSE bulk CSVs for election
-years 2002–2024. Uses the `resultados` dataset.
+years 2002–2024. Creates `Politician` nodes with `active: false` — Câmara/Senado
+sync sets `active: true` for whoever holds a seat today. See `docs/TSE.md` for
+full details.
 
 **Logic**
 
-1. Download `resultados_{year}` ZIP from TSE for each election year
-2. Decompress in memory, stream-parse CSV row by row (encoding: windows-1252)
-3. Skip row immediately unless both conditions met — no memory cost:
-   - `DS_CARGO` is one of: `DEPUTADO FEDERAL`, `SENADOR`, `PRESIDENTE`, `VICE-PRESIDENTE`
-   - `DS_SIT_TOT_TURNO` is one of: `ELEITO`, `ELEITO POR QP`, `ELEITO POR MÉDIA`
-4. Upsert `Politician` by `NR_CPF_CANDIDATO` — stored as `cpf` on the node
-5. Any name variation for the same CPF across years → append to `name_aliases` automatically
-6. Store `SQ_CANDIDATO` and `tse_profile_url` for reference
+1. Download 56 files per year:
+   - `votacao_candidato_munzona_{year}_BR.csv` → Presidente only
+   - `votacao_candidato_munzona_{year}_{UF}.csv` × 27 → Deputado Federal + Senador
+   - `consulta_cand_{year}_{UF}.csv` × 27 + `_BR` → CPF (not present in votacao files)
+2. Stream all votacao files, filter by `DS_CARGO` and `DS_SIT_TOT_TURNO`,
+   keep highest `NR_TURNO` per `SQ_CANDIDATO`
+3. Join winning `SQ_CANDIDATO` set against `consulta_cand` to get `NR_CPF_CANDIDATO`
+4. Upsert `Politician` by `cpf` — `active: false`, all other fields from TSE data
+5. Cross-year: name variations for same CPF → append to `name_aliases`
+6. Skip `_BR` on even years (no Presidente) — must not fail if file is absent
 
 **Auth**
-None
+None — CC-BY license
 
 **Docs**
-`https://dadosabertos.tse.jus.br/dataset/resultados-2024`
+`https://dadosabertos.tse.jus.br/dataset/resultados-2024` — see also `docs/workerDetails/TSE.md`
 
 **Format**
-CSV inside ZIP, windows-1252 encoding
+ISO-8859-1, CRLF, semicolon separator, double-quoted. Null sentinels: `#NULO`/`-1`
+= blank, `#NE`/`-3` = field didn't exist that year.
 
 **Schedule**
 Manually triggered — one run per election year. Re-run after each new election cycle.
@@ -43,10 +48,9 @@ mandate info — takes precedence over TSE CSV data.
 **Logic**
 
 1. `GET /deputados` — paginate through full deputy list
-2. For each deputy `GET /deputados/{id}` — fetch full profile including CPF
-and party history
+2. For each deputy `GET /deputados/{id}` — fetch full profile including CPF and party history
 3. Upsert `Politician` by `cpf` — create if not exists, update `party_current`,
-   `role_current`, `photo_url`, `active`
+   `role_current`, `photo_url`, `active: true`
 4. Store raw `id` from Câmara API in properties for future delta syncs
 
 **Auth**
@@ -73,10 +77,9 @@ mandate info — takes precedence over TSE CSV data.
 **Logic**
 
 1. `GET /senador/lista/atual.json` — full senator list
-2. For each senator `GET /senador/{codigo}/historico.json` — mandate history
-and party affiliations
+2. For each senator `GET /senador/{codigo}/historico.json` — mandate history and party affiliations
 3. Upsert `Politician` by `cpf` — create if not exists, update `party_current`,
-   `role_current`, `photo_url`, `active`
+   `role_current`, `photo_url`, `active: true`
 
 **Auth**
 None
@@ -98,6 +101,7 @@ Weekly
 One-time search pass across all `Politician` and `Person` nodes to find their
 legal proceedings in all Brazilian courts. Seeds the `LegalProceeding` nodes
 and `DEFENDANT_IN` edges that `DataJud Watcher` will then track ongoing.
+
 **Logic**
 
 1. For each `Politician` / `Person` node not yet searched:
@@ -110,15 +114,14 @@ and `DEFENDANT_IN` edges that `DataJud Watcher` will then track ongoing.
    - Store `assuntos` array on the node — used later for scandal cluster detection
    - Create `DEFENDANT_IN` edge with current `outcome` from latest movement
    - Register case with watcher tracking table in Postgres
-3. Follow `processoRelacionado` references — if a case links to another,
-ingest that too
+3. Follow `processoRelacionado` references — if a case links to another, ingest that too
 4. Flag cases where CPF matches are ambiguous → human review in backoffice
 
 **Auth**
 
-```js
+```txt
 headers = {
-  "Authorization": "ApiKey {key}",
+  "Authorization": "ApiKey cDZHYzlZa0JadVREZDJCendFbzVlQTU2S3phNTYwdjAy",
   "Content-Type": "application/json"
 }
 ```
@@ -130,8 +133,7 @@ headers = {
 JSON — Elasticsearch query DSL. Pagination via `search_after`.
 
 **Schedule**
-Manually triggered — run once after each politician import batch, then on
-demand for new nodes.
+Manually triggered — run once after each politician import batch, then on demand for new nodes.
 
 ---
 
@@ -155,11 +157,9 @@ unlinked spinoff cases for human review.
    - `Prescrição` → update to `prescribed`, set `LegalProceeding.status` to `concluded`
    - `Inclusão de parte` → extract CPF/CNPJ:
      - CPF matches `Politician` exactly → new `DEFENDANT_IN` edge
-     - CNPJ matches `Organization` → new `DEFENDANT_IN` edge on org
-       (org is a case defendant)
+     - CNPJ matches `Organization` → new `DEFENDANT_IN` edge on org (org is a case defendant)
      - CPF unknown → create `Person` node, flag for review
-     - CNPJ unknown → create `Organization` node (with CNPJ only),
-       trigger `CNPJ Enricher`, flag for review
+     - CNPJ unknown → create `Organization` node (with CNPJ only), trigger `CNPJ Enricher`, flag for review
    - `Desmembramento` → extract new case number → new `LegalProceeding` node,
      inherit `INVESTIGATES` edge to same `Scandal`, register with watcher automatically
 5. On each poll also check `processoRelacionado` field:
@@ -175,9 +175,9 @@ tracking table via the backoffice.
 
 **Auth**
 
-```js
+```txt
 headers = {
-  "Authorization": "ApiKey {key}",
+  "Authorization": "ApiKey cDZHYzlZa0JadVREZDJCendFbzVlQTU2S3phNTYwdjAy",
   "Content-Type": "application/json"
 }
 ```
@@ -216,7 +216,7 @@ Also extracts QSA (Quadro de Sócios e Administradores) board members, creates
 4. For each entry in `qsa` (board members):
    - If entry has **CPF** (individual):
      - Attempt partial match against `Politician` nodes by masked CPF pattern
-     - Match found → create `pending_review` entry of type `cpf_controls_politician`
+     - Match found → create `pending_review` entry of type `possible_politician_in_qsa`
        with both IDs — never create the edge directly, always requires human confirmation
      - No match → create `Person` node, create `CONTROLS` edge
    - If entry has **CNPJ** (another company):
@@ -271,8 +271,7 @@ None (Wikipedia API is open)
 JSON
 
 **Schedule**
-One-time script — run once after initial politician import. Re-run after each
-TSE CSV import cycle.
+One-time script — run once after initial politician import. Re-run after each TSE CSV import cycle.
 
 ---
 
@@ -334,7 +333,7 @@ flowchart TD
     CNPJ --> PERSON
     CNPJ -->|CONTROLS edges| ORG
     CNPJ -->|OWNED_BY edges\nshell chains| ORG
-    CNPJ -->|cpf_controls_politician| HUMAN_CPF["👤 confirms or rejects\npossible politician match"]
+    CNPJ -->|possible_politician_in_qsa| HUMAN_CPF["👤 confirms or rejects\npossible politician match"]
     HUMAN_CPF -->|confirmed| DEF2
     WATCHER -->|unknown CPF| HUMAN_PERSON["👤 reviews\nnew Person node"]
     WATCHER -->|unlinked spinoff| HUMAN_SEED["👤 manually seeds\nnew case number"]
