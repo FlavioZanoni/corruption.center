@@ -1,0 +1,108 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: corruption
+      POSTGRES_PASSWORD: corruption
+      POSTGRES_DB: corruption
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U corruption -d corruption"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  memgraph:
+    image: memgraph/memgraph:latest
+    restart: unless-stopped
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+    volumes:
+      - memgraph_dev_data:/var/lib/memgraph
+    command: ["--storage-snapshot-interval-sec=3600", "--storage-snapshot-on-exit=true", "--storage-wal-enabled=true"]
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "7687"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
+      MEMGRAPH_URI: bolt://memgraph:7687
+      MEMGRAPH_USER: ""
+      MEMGRAPH_PASS: ""
+      PORT: "8080"
+      DEV: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  camara-sync:
+    image: golang:1.25-alpine
+    profiles: ["workers"]
+    restart: "no"
+    working_dir: /workspace/backend
+    volumes:
+      - ./:/workspace
+    environment:
+      DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
+      MEMGRAPH_URI: bolt://memgraph:7687
+      MEMGRAPH_USER: ""
+      MEMGRAPH_PASS: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    command: ["sh", "-lc", "apk add --no-cache netcat-openbsd postgresql-client >/dev/null 2>&1; go run ./workers/camara/cmd --persist-db"]
+
+  senado-sync:
+    image: golang:1.25-alpine
+    profiles: ["workers"]
+    restart: "no"
+    working_dir: /workspace/backend
+    volumes:
+      - ./:/workspace
+    environment:
+      DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
+      MEMGRAPH_URI: bolt://memgraph:7687
+      MEMGRAPH_USER: ""
+      MEMGRAPH_PASS: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    command: ["sh", "-lc", "apk add --no-cache netcat-openbsd postgresql-client >/dev/null 2>&1; go run ./workers/senado/cmd --persist-db"]
+
+volumes:
+  postgres_dev_data:
+  memgraph_dev_data:

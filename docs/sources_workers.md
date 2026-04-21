@@ -48,7 +48,8 @@ mandate info — takes precedence over TSE CSV data.
 **Logic**
 
 1. `GET /deputados` — paginate through full deputy list
-2. For each deputy `GET /deputados/{id}` — fetch full profile including CPF and party history
+2. For each deputy `GET /deputados/{id}` — fetch full profile including CPF
+and party history
 3. Upsert `Politician` by `cpf` — create if not exists, update `party_current`,
    `role_current`, `photo_url`, `active: true`
 4. Store raw `id` from Câmara API in properties for future delta syncs

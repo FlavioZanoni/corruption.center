@@ -132,6 +132,39 @@ CREATE TABLE IF NOT EXISTS tse_import_log (
   error_message    TEXT
 );
 
+-- ─── Camara sync log ──────────────────────────────────────────────────────────
+-- Stores one row per Camara sync run with per-run counters.
+
+CREATE TABLE IF NOT EXISTS camara_sync_log (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  status             TEXT NOT NULL CHECK (status IN ('running', 'success', 'failed')),
+  listed_deputies    INT NOT NULL DEFAULT 0,
+  detail_fetched     INT NOT NULL DEFAULT 0,
+  active_confirmed   INT NOT NULL DEFAULT 0,
+  skipped_no_cpf     INT NOT NULL DEFAULT 0,
+  skipped_not_active INT NOT NULL DEFAULT 0,
+  records_upserted   INT NOT NULL DEFAULT 0,
+  started_at         TIMESTAMPTZ DEFAULT now(),
+  finished_at        TIMESTAMPTZ,
+  error_message      TEXT
+);
+
+-- ─── Senado sync log ──────────────────────────────────────────────────────────
+-- Stores one row per Senado sync run with per-run counters.
+
+CREATE TABLE IF NOT EXISTS senado_sync_log (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  status             TEXT NOT NULL CHECK (status IN ('running', 'success', 'failed')),
+  listed_senators    INT NOT NULL DEFAULT 0,
+  active_confirmed   INT NOT NULL DEFAULT 0,
+  skipped_not_active INT NOT NULL DEFAULT 0,
+  skipped_invalid    INT NOT NULL DEFAULT 0,
+  records_upserted   INT NOT NULL DEFAULT 0,
+  started_at         TIMESTAMPTZ DEFAULT now(),
+  finished_at        TIMESTAMPTZ,
+  error_message      TEXT
+);
+
 -- ─── Indexes ──────────────────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_scraper_jobs_worker      ON scraper_jobs (worker);
@@ -157,3 +190,7 @@ CREATE INDEX IF NOT EXISTS idx_pending_review_status    ON pending_review (statu
 CREATE INDEX IF NOT EXISTS idx_pending_review_created   ON pending_review (created_at);
 
 CREATE INDEX IF NOT EXISTS idx_tse_import_year          ON tse_import_log (election_year);
+CREATE INDEX IF NOT EXISTS idx_camara_sync_status       ON camara_sync_log (status);
+CREATE INDEX IF NOT EXISTS idx_camara_sync_started      ON camara_sync_log (started_at);
+CREATE INDEX IF NOT EXISTS idx_senado_sync_status       ON senado_sync_log (status);
+CREATE INDEX IF NOT EXISTS idx_senado_sync_started      ON senado_sync_log (started_at);

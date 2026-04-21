@@ -15,6 +15,8 @@ import (
 
 	"corruption-center/db/memgraph"
 	"corruption-center/db/psql"
+	"corruption-center/workers/camara"
+	"corruption-center/workers/senado"
 	"corruption-center/workers/tse"
 )
 
@@ -43,9 +45,16 @@ func main() {
 		persistDB   = flag.Bool("persist-db", false, "Persist output to Postgres/Memgraph")
 		skipDone    = flag.Bool("skip-processed", true, "Skip year when tse_import_log status is success")
 		batchSize   = flag.Int("batch-size", 500, "Memgraph upsert batch size")
+		triggerCam  = flag.Bool("trigger-camara", false, "Run Camara sync after TSE import completes")
+		triggerSen  = flag.Bool("trigger-senado", false, "Run Senado sync after TSE import completes")
 	)
 	flag.Parse()
 	ctx := context.Background()
+
+	if (*triggerCam || *triggerSen) && !*persistDB {
+		fmt.Fprintln(os.Stderr, "invalid flags: --trigger-camara/--trigger-senado require --persist-db")
+		os.Exit(2)
+	}
 
 	years, err := resolveYears(*year, *fromYear, *toYear, *allYears)
 	if err != nil {
@@ -196,6 +205,66 @@ func main() {
 		fmt.Fprintf(os.Stderr, "encode output: %v\n", err)
 		os.Exit(1)
 	}
+
+	if *persistDB && *triggerCam {
+		if err := runCamaraSync(ctx, pg, mg, *batchSize); err != nil {
+			fmt.Fprintf(os.Stderr, "trigger camara sync failed: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if *persistDB && *triggerSen {
+		if err := runSenadoSync(ctx, pg, mg, *batchSize); err != nil {
+			fmt.Fprintf(os.Stderr, "trigger senado sync failed: %v\n", err)
+			os.Exit(1)
+		}
+	}
+}
+
+func runCamaraSync(ctx context.Context, pg *psql.DB, mg *memgraph.DB, batchSize int) error {
+	fmt.Fprintln(os.Stderr, "[tse] triggering Camara sync")
+	res, err := camara.SyncCurrentDeputies(ctx, camara.SyncOptions{Items: 100})
+	if err != nil {
+		return err
+	}
+	run, err := pg.CreateCamaraSyncRun(ctx)
+	if err != nil {
+		return err
+	}
+	upserted, err := mg.UpsertPoliticiansFromCamara(ctx, res.Records, batchSize)
+	if err != nil {
+		errMsg := err.Error()
+		_ = pg.FinalizeCamaraSyncRun(ctx, run.ID, psql.JobStatusFailed, res.Stats, 0, &errMsg)
+		return err
+	}
+	if err := pg.FinalizeCamaraSyncRun(ctx, run.ID, psql.JobStatusSuccess, res.Stats, upserted, nil); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "[tse] camara sync finished upserted=%d listed=%d\n", upserted, res.Stats.ListedDeputies)
+	return nil
+}
+
+func runSenadoSync(ctx context.Context, pg *psql.DB, mg *memgraph.DB, batchSize int) error {
+	fmt.Fprintln(os.Stderr, "[tse] triggering Senado sync")
+	res, err := senado.SyncCurrentSenators(ctx, senado.SyncOptions{})
+	if err != nil {
+		return err
+	}
+	run, err := pg.CreateSenadoSyncRun(ctx)
+	if err != nil {
+		return err
+	}
+	upserted, err := mg.UpsertPoliticiansFromSenado(ctx, res.Records, batchSize)
+	if err != nil {
+		errMsg := err.Error()
+		_ = pg.FinalizeSenadoSyncRun(ctx, run.ID, psql.JobStatusFailed, res.Stats, 0, &errMsg)
+		return err
+	}
+	if err := pg.FinalizeSenadoSyncRun(ctx, run.ID, psql.JobStatusSuccess, res.Stats, upserted, nil); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "[tse] senado sync finished upserted=%d listed=%d\n", upserted, res.Stats.ListedSenators)
+	return nil
 }
 
 func mustEnv(key string) string {

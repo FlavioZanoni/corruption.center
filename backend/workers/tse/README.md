@@ -59,6 +59,8 @@ Optional flags:
 - `--persist-db` writes imported records to Postgres/Memgraph
 - `--skip-processed` skips years already marked `success` in `tse_import_log` (default `true`)
 - `--batch-size` Memgraph write batch size (default `500`)
+- `--trigger-camara` runs Camara sync after TSE finishes (requires `--persist-db`)
+- `--trigger-senado` runs Senado sync after TSE finishes (requires `--persist-db`)
 
 The command writes JSON output to stdout containing one `runs[]` entry per processed year.
 
