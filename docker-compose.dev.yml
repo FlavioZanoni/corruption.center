@@ -26,7 +26,7 @@ services:
       - memgraph_dev_data:/var/lib/memgraph
     command: ["--storage-snapshot-interval-sec=3600", "--storage-snapshot-on-exit=true", "--storage-wal-enabled=true"]
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "7687"]
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/7687'"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -34,36 +34,43 @@ services:
   api:
     build:
       context: ./backend
-      dockerfile: Dockerfile
-    restart: unless-stopped
+      dockerfile: Dockerfile.dev
     environment:
       DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
       MEMGRAPH_URI: bolt://memgraph:7687
-      MEMGRAPH_USER: ""
-      MEMGRAPH_PASS: ""
+      MEMGRAPH_USER: ${MEMGRAPH_USER:-}
+      MEMGRAPH_PASS: ${MEMGRAPH_PASS:-}
+      BACKOFFICE_USER: ${BACKOFFICE_USER:-admin}
+      BACKOFFICE_PASS: ${BACKOFFICE_PASS:-changeme}
       PORT: "8080"
       DEV: "true"
     ports:
       - "8080:8080"
+    volumes:
+      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy
       memgraph:
         condition: service_healthy
+    command: ["air", "-c", ".air.toml"]
 
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: http://localhost:8080
+      dockerfile: Dockerfile.dev
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8080
     ports:
       - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
     depends_on:
       - api
+    command: ["pnpm", "dev"]
 
   camara-sync:
     image: golang:1.25-alpine
@@ -75,14 +82,14 @@ services:
     environment:
       DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
       MEMGRAPH_URI: bolt://memgraph:7687
-      MEMGRAPH_USER: ""
-      MEMGRAPH_PASS: ""
+      MEMGRAPH_USER: ${MEMGRAPH_USER:-}
+      MEMGRAPH_PASS: ${MEMGRAPH_PASS:-}
     depends_on:
       postgres:
         condition: service_healthy
       memgraph:
         condition: service_healthy
-    command: ["sh", "-lc", "apk add --no-cache netcat-openbsd postgresql-client >/dev/null 2>&1; go run ./workers/camara/cmd --persist-db"]
+    command: ["sh", "-lc", "apk add --no-cache bash netcat-openbsd postgresql-client >/dev/null 2>&1; export PATH=/usr/local/go/bin:$PATH; go run ./workers/camara/cmd --persist-db"]
 
   senado-sync:
     image: golang:1.25-alpine
@@ -94,14 +101,40 @@ services:
     environment:
       DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
       MEMGRAPH_URI: bolt://memgraph:7687
-      MEMGRAPH_USER: ""
-      MEMGRAPH_PASS: ""
+      MEMGRAPH_USER: ${MEMGRAPH_USER:-}
+      MEMGRAPH_PASS: ${MEMGRAPH_PASS:-}
     depends_on:
       postgres:
         condition: service_healthy
       memgraph:
         condition: service_healthy
-    command: ["sh", "-lc", "apk add --no-cache netcat-openbsd postgresql-client >/dev/null 2>&1; go run ./workers/senado/cmd --persist-db"]
+    command: ["sh", "-lc", "apk add --no-cache bash netcat-openbsd postgresql-client >/dev/null 2>&1; export PATH=/usr/local/go/bin:$PATH; go run ./workers/senado/cmd --persist-db"]
+
+  datajud-watcher:
+    image: golang:1.25-alpine
+    profiles: ["workers"]
+    restart: "no"
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    environment:
+      DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
+      MEMGRAPH_URI: bolt://memgraph:7687
+      MEMGRAPH_USER: ${MEMGRAPH_USER:-}
+      MEMGRAPH_PASS: ${MEMGRAPH_PASS:-}
+      DATAJUD_API_KEY: ${DATAJUD_API_KEY:-}
+      ENABLE_WRITES: "true"
+      VERIFY_TPU: "true"
+      STRICT_VERIFY: "false"
+      DATAJUD_POLL_LIMIT: "50"
+      DATAJUD_PROBE_CASE: ""
+      DATAJUD_PROBE_TRIBUNAL: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    command: ["sh", "-lc", "apk add --no-cache bash netcat-openbsd postgresql-client >/dev/null 2>&1; export PATH=/usr/local/go/bin:$PATH; ./deploy/datajud-watcher.sh"]
 
 volumes:
   postgres_dev_data:

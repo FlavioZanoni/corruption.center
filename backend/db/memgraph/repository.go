@@ -20,4 +20,8 @@ type Repository interface {
 
 	// search
 	QuerySearch(ctx context.Context, q string, nodeType string) (*models.GraphResponse, error)
+
+	// backoffice writes
+	UpsertLegalProceedingByCase(ctx context.Context, p DataJudProceedingUpsert) (string, error)
+	EnsureInvestigatesEdge(ctx context.Context, proceedingID, scandalID string) error
 }

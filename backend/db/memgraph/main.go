@@ -158,4 +158,3 @@ func splitStatements(content string) []string {
 
 	return statements
 }
-

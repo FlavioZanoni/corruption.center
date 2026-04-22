@@ -115,6 +115,20 @@ go run ./workers/tse/cmd \
   --skip-processed=false
 ```
 
+Trigger Camara/Senado after TSE completes:
+
+```bash
+DATABASE_URL="postgres://user:pass@localhost:5432/corruption_center?sslmode=disable" \
+MEMGRAPH_URI="bolt://localhost:7687" \
+MEMGRAPH_USER="memgraph" \
+MEMGRAPH_PASS="memgraph" \
+go run ./workers/tse/cmd \
+  --year 2022 \
+  --persist-db \
+  --trigger-camara \
+  --trigger-senado
+```
+
 ## Persistence Mode
 
 When `--persist-db` is enabled, the CLI will:

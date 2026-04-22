@@ -38,55 +38,58 @@ func (db *DB) QuerySearch(ctx context.Context, q string, nodeType string) (*mode
 
 func searchPersons(ctx context.Context, session neo4j.SessionWithContext, q string) (neo4j.ResultWithContext, error) {
 	return session.Run(ctx, `
-    CALL db.index.fulltext.queryNodes("person_fulltext", $q)
-    YIELD node, score
+    MATCH (node:Person)
+    WHERE toLower(node.name) CONTAINS toLower($q)
     OPTIONAL MATCH (node)-[r:INVOLVED_IN]->(s:Scandal)
     OPTIONAL MATCH (node)-[d:DEFENDANT_IN]->(lp:LegalProceeding)
     RETURN node, r, s, d, lp
-    ORDER BY score DESC
     LIMIT 20
   `, map[string]any{"q": q})
 }
 
 func searchPoliticians(ctx context.Context, session neo4j.SessionWithContext, q string) (neo4j.ResultWithContext, error) {
 	return session.Run(ctx, `
-    CALL db.index.fulltext.queryNodes("politician_fulltext", $q)
-    YIELD node, score
+    MATCH (node:Politician)
+    WHERE toLower(node.name) CONTAINS toLower($q)
+       OR ANY(alias IN coalesce(node.name_aliases, []) WHERE toLower(alias) CONTAINS toLower($q))
     OPTIONAL MATCH (node)-[r:INVOLVED_IN]->(s:Scandal)
     RETURN node, r, s
-    ORDER BY score DESC
     LIMIT 20
   `, map[string]any{"q": q})
 }
 
 func searchScandals(ctx context.Context, session neo4j.SessionWithContext, q string) (neo4j.ResultWithContext, error) {
 	return session.Run(ctx, `
-    CALL db.index.fulltext.queryNodes("scandal_fulltext", $q)
-    YIELD node, score
+    MATCH (node:Scandal)
+    WHERE toLower(node.name) CONTAINS toLower($q)
+       OR ANY(alias IN coalesce(node.aliases, []) WHERE toLower(alias) CONTAINS toLower($q))
+       OR toLower(coalesce(node.description, "")) CONTAINS toLower($q)
     OPTIONAL MATCH (p:Politician)-[r:INVOLVED_IN]->(node)
     RETURN node, r, p
-    ORDER BY score DESC
     LIMIT 20
   `, map[string]any{"q": q})
 }
 
 func searchOrganizations(ctx context.Context, session neo4j.SessionWithContext, q string) (neo4j.ResultWithContext, error) {
 	return session.Run(ctx, `
-    CALL db.index.fulltext.queryNodes("organization_fulltext", $q)
-    YIELD node, score
+    MATCH (node:Organization)
+    WHERE toLower(node.name) CONTAINS toLower($q)
     OPTIONAL MATCH (node)-[r:IMPLICATED_IN]->(s:Scandal)
     RETURN node, r, s
-    ORDER BY score DESC
     LIMIT 20
   `, map[string]any{"q": q})
 }
 
 func searchAll(ctx context.Context, session neo4j.SessionWithContext, q string) (neo4j.ResultWithContext, error) {
 	return session.Run(ctx, `
-    CALL db.index.fulltext.queryNodes("global_fulltext", $q)
-    YIELD node, score
+    MATCH (node)
+    WHERE (
+      (node:Politician AND (toLower(node.name) CONTAINS toLower($q) OR ANY(alias IN coalesce(node.name_aliases, []) WHERE toLower(alias) CONTAINS toLower($q))))
+      OR (node:Person AND toLower(node.name) CONTAINS toLower($q))
+      OR (node:Scandal AND (toLower(node.name) CONTAINS toLower($q) OR ANY(alias IN coalesce(node.aliases, []) WHERE toLower(alias) CONTAINS toLower($q))))
+      OR (node:Organization AND toLower(node.name) CONTAINS toLower($q))
+    )
     RETURN node
-    ORDER BY score DESC
     LIMIT 20
   `, map[string]any{"q": q})
 }

@@ -27,7 +27,7 @@ services:
       - memgraph_data:/var/lib/memgraph
     command: ["--storage-snapshot-interval-sec=3600", "--storage-snapshot-on-exit=true", "--storage-wal-enabled=true"]
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "7687"]
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/7687'"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -38,6 +38,9 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file: .env
+    environment:
+      BACKOFFICE_USER: ${BACKOFFICE_USER:-admin}
+      BACKOFFICE_PASS: ${BACKOFFICE_PASS:-changeme}
     ports:
       - "${PORT}:${PORT}"
     depends_on:
@@ -58,6 +61,58 @@ services:
       - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
       - api
+
+  camara-sync:
+    image: golang:1.25-alpine
+    profiles: ["workers"]
+    restart: "no"
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    command: ["/bin/sh", "-lc", "apk add --no-cache bash netcat-openbsd postgresql-client >/dev/null 2>&1; export PATH=/usr/local/go/bin:$PATH; ./deploy/camara-sync.sh"]
+
+  senado-sync:
+    image: golang:1.25-alpine
+    profiles: ["workers"]
+    restart: "no"
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    command: ["/bin/sh", "-lc", "apk add --no-cache bash netcat-openbsd postgresql-client >/dev/null 2>&1; export PATH=/usr/local/go/bin:$PATH; ./deploy/senado-sync.sh"]
+
+  datajud-watcher:
+    image: golang:1.25-alpine
+    profiles: ["workers"]
+    restart: "no"
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    env_file: .env
+    environment:
+      ENABLE_WRITES: ${ENABLE_WRITES:-true}
+      VERIFY_TPU: ${VERIFY_TPU:-true}
+      STRICT_VERIFY: ${STRICT_VERIFY:-false}
+      DATAJUD_POLL_LIMIT: ${DATAJUD_POLL_LIMIT:-100}
+      DATAJUD_PROBE_CASE: ${DATAJUD_PROBE_CASE:-}
+      DATAJUD_PROBE_TRIBUNAL: ${DATAJUD_PROBE_TRIBUNAL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    command: ["/bin/sh", "-lc", "apk add --no-cache bash netcat-openbsd postgresql-client >/dev/null 2>&1; export PATH=/usr/local/go/bin:$PATH; ./deploy/datajud-watcher.sh"]
 
 volumes:
   postgres_data:

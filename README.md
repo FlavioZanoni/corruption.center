@@ -48,6 +48,7 @@ Run worker containers on demand (profile `workers`):
 ```bash
 docker compose -f docker-compose.dev.yml --profile workers run --rm camara-sync
 docker compose -f docker-compose.dev.yml --profile workers run --rm senado-sync
+docker compose -f docker-compose.dev.yml --profile workers run --rm datajud-watcher
 ```
 
 Run TSE manually from host while DBs are up:
@@ -63,8 +64,56 @@ Optional post-TSE sync triggers:
 go run ./workers/tse/cmd --year 2022 --persist-db --trigger-camara --trigger-senado
 ```
 
+Custom range in dev (test mode):
+
+```bash
+cd backend
+go run ./workers/tse/cmd --from-year 2018 --to-year 2022 --persist-db
+```
+
 Stop dev stack:
 
 ```bash
 docker compose -f docker-compose.dev.yml down
 ```
+
+## Worker Deployment Notes
+
+- `camara` and `senado` are intended to be scheduled weekly jobs (cron/systemd/K8s CronJob).
+- `datajud-watcher` is configured as an on-demand/cron worker profile in compose (not auto-started).
+- `tse` is manual. In production run from host/server:
+
+```bash
+cd backend
+DATABASE_URL="..." MEMGRAPH_URI="..." MEMGRAPH_USER="..." MEMGRAPH_PASS="..." DATAJUD_API_KEY="..." \
+go run ./workers/tse/cmd --year 2022 --persist-db --trigger-camara --trigger-senado
+```
+
+If you do not want the automatic post-run syncs, omit `--trigger-camara` and
+`--trigger-senado` and run weekly jobs normally.
+
+## Cron With Docker Compose
+
+Use compose worker profile jobs with cron via:
+
+- `deploy/cron/run-compose-worker.sh`
+- `deploy/cron/crontab.dev.example`
+- `deploy/cron/crontab.prod.example`
+
+Install (after editing absolute paths):
+
+```bash
+crontab deploy/cron/crontab.dev.example
+```
+
+or
+
+```bash
+crontab deploy/cron/crontab.prod.example
+```
+
+Notes:
+
+- Uses `flock` lock files to avoid overlapping runs per worker.
+- Logs each run to `logs/workers/<service>.log`.
+- Runs workers as `docker compose --profile workers run --rm <service>`.

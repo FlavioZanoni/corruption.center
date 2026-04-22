@@ -31,34 +31,5 @@ CREATE INDEX ON :LegalProceeding(court);
 CREATE INDEX ON :LegalProceeding(status);
 CREATE INDEX ON :LegalProceeding(type);
 
-// ─── Full-text indexes ────────────────────────────────────────────────────────
-
-CALL db.index.fulltext.createNodeIndex(
-  "politician_fulltext",
-  ["Politician"],
-  ["name", "name_aliases"]
-);
-
-CALL db.index.fulltext.createNodeIndex(
-  "person_fulltext",
-  ["Person"],
-  ["name"]
-);
-
-CALL db.index.fulltext.createNodeIndex(
-  "scandal_fulltext",
-  ["Scandal"],
-  ["name", "aliases", "description"]
-);
-
-CALL db.index.fulltext.createNodeIndex(
-  "organization_fulltext",
-  ["Organization"],
-  ["name"]
-);
-
-CALL db.index.fulltext.createNodeIndex(
-  "global_fulltext",
-  ["Politician", "Person", "Scandal", "Organization"],
-  ["name", "name_aliases", "aliases"]
-);
+// Full-text procedures vary across Memgraph versions and may be unavailable.
+// Search endpoints use property-based fallback queries in application code.

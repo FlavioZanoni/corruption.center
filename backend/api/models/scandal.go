@@ -21,4 +21,3 @@ type Scandal struct {
 	Status         StatusType `json:"status"` // ongoing|concluded|prescribed
 	WikipediaURL   string     `json:"wikipedia_url"`
 }
-

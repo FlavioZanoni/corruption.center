@@ -109,7 +109,7 @@ func SyncCurrentDeputies(ctx context.Context, opts SyncOptions) (*SyncResult, er
 			}
 			result.Stats.DetailFetched++
 
-			if !isEmExercicio(detail.Dados.UltimoStatus.DescricaoStatus) {
+			if !isActiveDetail(detail) {
 				result.Stats.SkippedNotActive++
 				continue
 			}
@@ -226,6 +226,13 @@ func fetchDeputyDetail(ctx context.Context, client *http.Client, baseURL string,
 	return &payload, nil
 }
 
-func isEmExercicio(status string) bool {
-	return strings.EqualFold(strings.TrimSpace(status), "Em exercício")
+func isActiveDetail(d *detailResponse) bool {
+	if d == nil {
+		return false
+	}
+	status := strings.ToLower(strings.TrimSpace(d.Dados.UltimoStatus.DescricaoStatus))
+	if status == "" {
+		return true
+	}
+	return strings.Contains(status, "exerc")
 }

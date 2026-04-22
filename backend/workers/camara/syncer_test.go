@@ -45,7 +45,7 @@ func TestSyncCurrentDeputies_MapsAndFilters(t *testing.T) {
 						"siglaPartido":    "P2",
 						"siglaUf":         "RJ",
 						"urlFoto":         "f2d",
-						"descricaoStatus": "Em exercício",
+						"descricaoStatus": "",
 					},
 				},
 			})
