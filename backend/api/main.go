@@ -50,6 +50,8 @@ func (s *ApiServer) SetupRouter() *gin.Engine {
 		v1.GET("/timeline", h.Timeline.GetTimeline)
 	}
 
+	s.registerBackoffice(r)
+
 	return r
 }
 
@@ -63,4 +65,3 @@ func (s *ApiServer) Start(port string) {
 	r := s.SetupRouter()
 	r.Run(fmt.Sprintf(":%s", port))
 }
-

@@ -26,4 +26,10 @@ type Repository interface {
 	// migration tracking for memgraph
 	IsMemgraphMigrationApplied(ctx context.Context, filename string) (bool, error)
 	RecordMemgraphMigration(ctx context.Context, filename string) error
+
+	// backoffice
+	UpsertWatcherCase(ctx context.Context, caseNumber, tribunalEndpoint, scandalID, proceedingID, addedBy string) error
+	ListPendingReviews(ctx context.Context, status string, limit int) ([]PendingReviewItem, error)
+	UpdatePendingReviewStatus(ctx context.Context, id string, status string, reviewedBy string) error
+	ListWorkerLogs(ctx context.Context, limit int) ([]WorkerLogEntry, error)
 }
