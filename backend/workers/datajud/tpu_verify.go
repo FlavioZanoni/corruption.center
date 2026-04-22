@@ -1,0 +1,52 @@
+package datajud
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+)
+
+func VerifyMovementCodes(ctx context.Context) (bool, error) {
+	required := map[string][]string{
+		"51":  {"den", "receb"},
+		"901": {"prescri"},
+		"981": {"desmembr"},
+	}
+
+	for code, keywords := range required {
+		ok, err := verifyCode(ctx, code, keywords)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func verifyCode(ctx context.Context, code string, keywords []string) (bool, error) {
+	url := "https://www.cnj.jus.br/sgt/consulta_publica_movimentos.php?movimento=" + code
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false, err
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("datajud: fetch TPU movement %s: %w", code, err)
+	}
+	defer res.Body.Close()
+	b, err := io.ReadAll(io.LimitReader(res.Body, 512*1024))
+	if err != nil {
+		return false, err
+	}
+	lower := strings.ToLower(string(b))
+	for _, kw := range keywords {
+		if !strings.Contains(lower, kw) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
