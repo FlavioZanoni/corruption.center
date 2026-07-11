@@ -8,7 +8,8 @@ const MAX_YEAR = 2025;
 const YEAR_MARKERS = [2000, 2005, 2010, 2015, 2020, 2025];
 
 export function TimelineScrubber() {
-  const { timelineRange, setTimelineRange } = useAppStore();
+  const timelineRange = useAppStore((s) => s.timelineRange);
+  const setTimelineRange = useAppStore((s) => s.setTimelineRange);
 
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<"from" | "to" | null>(null);

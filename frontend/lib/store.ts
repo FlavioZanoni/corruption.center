@@ -19,6 +19,7 @@ const defaultNodeTypeFilters: NodeTypeFilters = {
   organization: true,
   legal_proceeding: true,
   source: true,
+  sanction: true,
 }
 
 const defaultEdgeStatusFilters: EdgeStatusFilters = {
@@ -54,7 +55,6 @@ interface AppState {
 
   // Selected node
   selectedNode: GraphNode | null
-  focusedNodeId: string | null
 
   // Search
   searchQuery: string
@@ -76,7 +76,6 @@ interface AppState {
   closeDetailPanel: () => void
 
   setSelectedNode: (node: GraphNode | null) => void
-  setFocusedNodeId: (id: string | null) => void
 
   setSearchQuery: (query: string) => void
 
@@ -96,7 +95,6 @@ export const useAppStore = create<AppState>((set) => ({
   isFilterPanelOpen: false,
   isDetailPanelOpen: false,
   selectedNode: null,
-  focusedNodeId: null,
   searchQuery: "",
   filters: defaultFilters,
   timelineRange: defaultTimelineRange,
@@ -108,16 +106,13 @@ export const useAppStore = create<AppState>((set) => ({
 
   setDetailPanelOpen: (open) => set({ isDetailPanelOpen: open }),
   closeDetailPanel: () =>
-    set({ isDetailPanelOpen: false, selectedNode: null, focusedNodeId: null }),
+    set({ isDetailPanelOpen: false, selectedNode: null }),
 
   setSelectedNode: (node) =>
     set({
       selectedNode: node,
       isDetailPanelOpen: node !== null,
-      focusedNodeId: node?.id ?? null,
     }),
-
-  setFocusedNodeId: (id) => set({ focusedNodeId: id }),
 
   setSearchQuery: (query) => set({ searchQuery: query }),
 

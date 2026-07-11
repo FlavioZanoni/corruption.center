@@ -7,6 +7,7 @@ export type NodeType =
   | "organization"
   | "legal_proceeding"
   | "source"
+  | "sanction"
 
 export type EdgeType =
   | "INVOLVED_IN"
@@ -18,6 +19,7 @@ export type EdgeType =
   | "INVESTIGATES"
   | "RELATED_TO"
   | "SUPPORTS"
+  | "SANCTIONED_IN"
 
 export type EdgeStatus = "convicted" | "indicted" | "cited" | "membership"
 
@@ -50,6 +52,8 @@ export interface PoliticianProperties {
   state?: string
   role?: string
   photo_url?: string
+  photo_source?: string
+  photo_attribution?: string
   birth_date?: string
   name_aliases?: string[]
   source_urls?: string[]
@@ -77,7 +81,25 @@ export interface OrganizationProperties {
   state?: string
   sector?: string
   logo_url?: string
+  photo_url?: string
+  photo_source?: string
+  photo_attribution?: string
   source_urls?: string[]
+}
+
+// Sanction node: an official registry entry (CEIS, CNEP, CEPIM, TCU
+// inelegibility, etc.) that a Politician/Person/Organization is SANCTIONED_IN.
+// source_url is mandatory — every sanction deep-links its authoritative record.
+export interface SanctionProperties {
+  registry?: string
+  sanction_type?: string
+  organ?: string
+  date_start?: string
+  date_end?: string
+  process_ref?: string
+  source_url: string
+  // provenance flags surfaced by ingest workers
+  provenance_source?: string
 }
 
 export interface LegalProceedingProperties {
@@ -105,6 +127,27 @@ export interface SearchResponse {
   total: number
 }
 
+// ─── Politician browse (paginated list) ──────────────────────────────────────
+
+export interface PoliticianListItem {
+  id: string
+  name: string
+  party_current: string
+  role_current: string
+  state: string
+  photo_url?: string
+  photo_attribution?: string
+  sanction_count: number
+  proceeding_count: number
+}
+
+export interface PoliticianListResponse {
+  items: PoliticianListItem[]
+  page: number
+  page_size: number
+  total: number
+}
+
 // ─── Timeline ────────────────────────────────────────────────────────────────
 
 export interface TimelineResponse extends GraphResponse {
@@ -121,6 +164,7 @@ export interface NodeTypeFilters {
   organization: boolean
   legal_proceeding: boolean
   source: boolean
+  sanction: boolean
 }
 
 export interface EdgeStatusFilters {

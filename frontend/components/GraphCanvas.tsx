@@ -10,7 +10,6 @@ import * as d3 from "d3";
 import { useAppStore } from "@/lib/store";
 import type { LayoutMode } from "@/lib/store";
 import { fetchTimeline } from "@/lib/api/timeline";
-import { fetchExpandGraph } from "@/lib/api/graph";
 import { NODE_COLORS } from "@/lib/constants";
 import type {
   GraphNode,
@@ -28,6 +27,7 @@ const RADII: Record<string, number> = {
   organization: 11,
   legal_proceeding: 9,
   source: 7,
+  sanction: 9,
 };
 
 // Edge thickness encodes conviction weight — the visual mass tells the story
@@ -145,6 +145,9 @@ const LUCIDE_PATHS: Record<string, string> = {
     <line x1="16" y1="13" x2="8" y2="13"/>
     <line x1="16" y1="17" x2="8" y2="17"/>
     <line x1="10" y1="9" x2="8" y2="9"/>`,
+  sanction: `
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>`,
 };
 
 function iconDataURI(nodeType: string): string {
@@ -240,14 +243,6 @@ class ExpandState {
     }
   }
 
-  expand(nodeId: string): Set<string> {
-    this.visibleIds.add(nodeId);
-    for (const n of this.adjacency.get(nodeId) ?? []) {
-      this.visibleIds.add(n);
-    }
-    return new Set(this.visibleIds);
-  }
-
   collapse(): Set<string> {
     this.visibleIds = new Set(
       Array.from(this.allNodes.values())
@@ -318,29 +313,28 @@ export function GraphCanvas() {
   const expandRef = useRef<ExpandState>(new ExpandState());
   const visibleRef = useRef<Set<string>>(new Set());
 
-  const {
-    timelineRange,
-    focusedNodeId,
-    filters,
-    selectedNode,
-    layoutMode,
-    setSelectedNode,
-  } = useAppStore();
+  // Subscribe to only the slices this component needs — keeps the (expensive)
+  // graph component from re-rendering on unrelated store changes such as the
+  // debounced search query or the filter-panel open/close toggle.
+  const timelineRange = useAppStore((s) => s.timelineRange);
+  const filters = useAppStore((s) => s.filters);
+  const selectedNode = useAppStore((s) => s.selectedNode);
+  const layoutMode = useAppStore((s) => s.layoutMode);
+  const setSelectedNode = useAppStore((s) => s.setSelectedNode);
 
   useLayoutEffect(() => {
     filtersRef.current = filters;
   });
 
-  const { data: timelineData } = useQuery({
+  const {
+    data: timelineData,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["timeline", timelineRange.from, timelineRange.to],
     queryFn: () => fetchTimeline(timelineRange.from, timelineRange.to),
     staleTime: 2 * 60 * 1000,
-  });
-
-  useQuery({
-    queryKey: ["expand", focusedNodeId, 2],
-    queryFn: () => fetchExpandGraph(focusedNodeId!, 2),
-    enabled: !!focusedNodeId,
   });
 
   // refreshVisible: update DOM display without rebuilding the simulation
@@ -829,13 +823,57 @@ export function GraphCanvas() {
     return () => ro.disconnect();
   }, []);
 
+  const isEmpty =
+    !isLoading && !isError && !!timelineData && timelineData.nodes.length === 0;
+
   return (
     <div
       ref={containerRef}
       className="absolute inset-0 w-full h-full"
       style={{ background: "#0a0a0a", pointerEvents: "all" }}
     >
-      <svg ref={svgRef} style={{ width: "100%", height: "100%" }} />
+      <svg
+        ref={svgRef}
+        role="img"
+        aria-label="Rede de escândalos de corrupção, políticos e processos judiciais"
+        style={{ width: "100%", height: "100%" }}
+      />
+
+      {isLoading && (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
+          aria-live="polite"
+        >
+          <span className="text-xs font-mono uppercase tracking-widest text-text-muted animate-pulse">
+            Carregando a rede…
+          </span>
+        </div>
+      )}
+
+      {isError && (
+        <div
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 text-center px-6"
+          role="alert"
+        >
+          <p className="text-sm font-serif text-text max-w-xs">
+            Não foi possível carregar a rede.
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="text-xs font-mono uppercase tracking-widest text-text-muted hover:text-text border border-border rounded-sm px-3 py-1.5 transition-colors"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      {isEmpty && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none px-6">
+          <p className="text-xs font-mono uppercase tracking-widest text-text-muted text-center max-w-xs">
+            Nenhum escândalo no período selecionado
+          </p>
+        </div>
+      )}
     </div>
   );
 }

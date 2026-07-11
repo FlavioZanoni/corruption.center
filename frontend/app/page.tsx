@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { Users } from "lucide-react";
 import { SearchBar } from "@/components/SearchBar";
 import { FilterPanel } from "@/components/FilterPanel";
 import { TimelineScrubber } from "@/components/TimelineScrubber";
@@ -24,10 +26,33 @@ export default function Home() {
         </div>
       )}
 
-      <div className="absolute bottom-16 right-4 z-10 pointer-events-none select-none">
-        <span className="text-[9px] font-mono text-[#333333] tracking-widest uppercase">
+      <Link
+        href="/politicos"
+        className="absolute top-16 left-4 z-30 inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface/90 backdrop-blur border border-border rounded-sm text-[11px] font-mono uppercase tracking-wider text-text-muted hover:text-white hover:border-[#c8a96e]/60 transition-colors"
+      >
+        <Users size={13} strokeWidth={1.5} />
+        Explorar políticos
+      </Link>
+
+      <div className="absolute bottom-16 right-4 z-10 flex flex-col items-end gap-1.5">
+        <span className="text-[9px] font-mono text-[#333333] tracking-widest uppercase pointer-events-none select-none">
           corruption.center
         </span>
+        <div className="flex gap-2 text-[8px] font-mono text-[#555555] pointer-events-auto">
+          <Link
+            href="/metodologia"
+            className="hover:text-[#999999] transition-colors underline"
+          >
+            Metodologia e fontes
+          </Link>
+          <span className="text-[#333333]">·</span>
+          <a
+            href="mailto:contato@corruption.center"
+            className="hover:text-[#999999] transition-colors underline"
+          >
+            Contato
+          </a>
+        </div>
       </div>
     </main>
   );

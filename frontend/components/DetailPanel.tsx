@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import {
   X,
   ExternalLink,
@@ -10,6 +10,7 @@ import {
   Building2,
   Scale,
   FileText,
+  Ban,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
@@ -39,7 +40,31 @@ function NodeIcon({
       return <Scale {...props} className="text-node-legal" />;
     case "source":
       return <FileText {...props} className="text-[#7a7a7a]" />;
+    case "sanction":
+      return <Ban {...props} className="text-[#d98a4b]" />;
   }
+}
+
+// Legally required label for any node/edge not yet confirmed by a human
+// (see docs/legal_compliance.md — "unconfirmed — pending review" discipline).
+function ReviewBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm border border-[#ccaa22]/40 bg-[#ccaa22]/10">
+      <AlertTriangle size={9} strokeWidth={1.5} className="text-[#ccaa22] shrink-0" />
+      <span className="text-[8px] font-mono uppercase tracking-wider text-[#ccaa22] leading-none">
+        não confirmado — pendente de revisão
+      </span>
+    </span>
+  );
+}
+
+// A node is treated as unconfirmed when it carries machine-ingest provenance
+// (DJEN-created Person/Organization) or is a Sanction whose subject linkage is
+// established automatically and routed through human review.
+function isUnconfirmed(node: GraphNode | null): boolean {
+  if (!node) return false;
+  if (node.type === "sanction") return true;
+  return Boolean(node.properties.provenance_source);
 }
 
 const NODE_TYPE_LABELS: Record<string, string> = {
@@ -49,6 +74,7 @@ const NODE_TYPE_LABELS: Record<string, string> = {
   organization: "Organização",
   legal_proceeding: "Processo",
   source: "Fonte",
+  sanction: "Sanção",
 };
 
 const EDGE_TYPE_LABELS: Record<string, string> = {
@@ -61,6 +87,7 @@ const EDGE_TYPE_LABELS: Record<string, string> = {
   INVESTIGATES: "Investigado por",
   RELATED_TO: "Relacionado a",
   SUPPORTS: "Apoia",
+  SANCTIONED_IN: "Sancionado em",
 };
 
 const PROP_LABELS: Record<string, string> = {
@@ -94,6 +121,12 @@ const PROP_LABELS: Record<string, string> = {
   tags: "Tags",
   aliases: "Aliases",
   name: "Nome",
+  registry: "Cadastro",
+  sanction_type: "Tipo de sanção",
+  organ: "Órgão sancionador",
+  process_ref: "Processo de referência",
+  provenance_source: "Origem do dado",
+  provenance_tribunal: "Tribunal (origem)",
 };
 
 // ─── Date formatting ──────────────────────────────────────────────────────────
@@ -289,9 +322,65 @@ function ConnectedNodeItem({
   );
 }
 
+// Dedicated rendering for a Sanction connection: registry, type, sanctioning
+// organ, effective period and — crucially — the official source_url deep link
+// plus the pending-review provenance label required for compliance.
+function SanctionItem({ node }: { node: GraphNode }) {
+  const p = node.properties;
+  const registry = (p.registry as string | undefined) ?? node.label;
+  const sanctionType = p.sanction_type as string | undefined;
+  const organ = p.organ as string | undefined;
+  const dateStart = p.date_start as string | undefined;
+  const dateEnd = p.date_end as string | undefined;
+  const sourceUrl = p.source_url as string | undefined;
+  const period = [dateStart, dateEnd]
+    .filter((d): d is string => Boolean(d))
+    .map((d) => formatDate(d))
+    .join(" — ");
+
+  return (
+    <div className="px-4 py-3 border-b border-[#1a1a1a]">
+      <div className="flex items-center gap-2 mb-1 flex-wrap">
+        <span className="text-[10px] font-mono uppercase tracking-wider text-[#d98a4b]">
+          {registry}
+        </span>
+        {sanctionType && (
+          <span className="text-sm font-serif text-text leading-tight">
+            {PROP_VALUES[sanctionType] ?? sanctionType}
+          </span>
+        )}
+      </div>
+      {organ && (
+        <div className="text-[11px] font-mono text-text-muted">{organ}</div>
+      )}
+      {period && (
+        <div className="text-[11px] font-mono text-text-muted mt-0.5">
+          {period}
+        </div>
+      )}
+      <div className="flex items-center gap-2 mt-2 flex-wrap">
+        {sourceUrl && (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-[11px] font-mono text-text-muted hover:text-[#cc2222] transition-colors"
+          >
+            <ExternalLink size={10} strokeWidth={1.5} className="shrink-0" />
+            <span>Registro oficial</span>
+          </a>
+        )}
+        <ReviewBadge />
+      </div>
+    </div>
+  );
+}
+
 export function DetailPanel() {
-  const { isDetailPanelOpen, selectedNode, closeDetailPanel, setSelectedNode } =
-    useAppStore();
+  const isDetailPanelOpen = useAppStore((s) => s.isDetailPanelOpen);
+  const selectedNode = useAppStore((s) => s.selectedNode);
+  const closeDetailPanel = useAppStore((s) => s.closeDetailPanel);
+  const setSelectedNode = useAppStore((s) => s.setSelectedNode);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -301,7 +390,11 @@ export function DetailPanel() {
     return () => document.removeEventListener("keydown", handleKey);
   }, [isDetailPanelOpen, closeDetailPanel]);
 
-  const { data: expandData, isLoading } = useQuery({
+  const {
+    data: expandData,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ["expand", selectedNode?.id, 1],
     queryFn: () => fetchExpandGraph(selectedNode!.id, 1),
     enabled: !!selectedNode?.id && isDetailPanelOpen,
@@ -312,17 +405,21 @@ export function DetailPanel() {
     [setSelectedNode],
   );
 
-  const connectedNodes: Array<{ node: GraphNode; edge: GraphEdge }> = [];
-  if (expandData && selectedNode) {
+  const connectedNodes = useMemo<
+    Array<{ node: GraphNode; edge: GraphEdge }>
+  >(() => {
+    if (!expandData || !selectedNode) return [];
+    const list: Array<{ node: GraphNode; edge: GraphEdge }> = [];
     const nodeMap = new Map(expandData.nodes.map((n) => [n.id, n]));
     for (const edge of expandData.edges) {
       const otherId = edge.from === selectedNode.id ? edge.to : edge.from;
       const other = nodeMap.get(otherId);
       if (other && otherId !== selectedNode.id) {
-        connectedNodes.push({ node: other, edge });
+        list.push({ node: other, edge });
       }
     }
-  }
+    return list;
+  }, [expandData, selectedNode]);
 
   const node = selectedNode;
   const properties = node?.properties ?? {};
@@ -330,16 +427,30 @@ export function DetailPanel() {
   const photoUrl =
     (properties.photo_url as string | undefined) ??
     (properties.logo_url as string | undefined);
+  const photoAttribution = properties.photo_attribution as string | undefined;
 
   const tseUrls = properties.tse_profile_urls as string[] | undefined;
   const tseUrl = tseUrls?.[0];
   const wikipediaUrl = properties.wikipedia_url as string | undefined;
+  const sourceUrl = properties.source_url as string | undefined;
+  const provenanceLink = properties.provenance_link as string | undefined;
   const sourceUrls = (properties.source_urls as string[] | undefined) ?? [];
   const allLinks = [
     ...(tseUrl ? [tseUrl] : []),
     ...(wikipediaUrl ? [wikipediaUrl] : []),
+    ...(sourceUrl ? [sourceUrl] : []),
+    ...(provenanceLink ? [provenanceLink] : []),
     ...sourceUrls,
   ];
+
+  const unconfirmed = isUnconfirmed(node);
+
+  const sanctionConnections = connectedNodes.filter(
+    (c) => c.node.type === "sanction",
+  );
+  const otherConnections = connectedNodes.filter(
+    (c) => c.node.type !== "sanction",
+  );
 
   const ringColor = NODE_COLORS[node?.type ?? ""] ?? "#555555";
 
@@ -356,28 +467,41 @@ export function DetailPanel() {
             <div className="shrink-0 border-b border-border bg-[#0d0d0d] px-6 pt-6 pb-5">
               <div className="flex items-start gap-5">
                 {/* Avatar */}
-                <div
-                  className="shrink-0 rounded-full overflow-hidden"
-                  style={{
-                    width: 96,
-                    height: 96,
-                    boxShadow: `0 0 0 3px ${ringColor}, 0 0 0 5px #0d0d0d`,
-                  }}
-                >
-                  {photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={photoUrl}
-                      alt={node.label}
-                      className="w-full h-full object-cover object-center"
-                    />
-                  ) : (
-                    <div
-                      className="w-full h-full flex items-center justify-center"
-                      style={{ background: `${ringColor}22` }}
+                <div className="shrink-0 flex flex-col items-center gap-1.5 w-24">
+                  <div
+                    className="rounded-full overflow-hidden"
+                    style={{
+                      width: 96,
+                      height: 96,
+                      boxShadow: `0 0 0 3px ${ringColor}, 0 0 0 5px #0d0d0d`,
+                    }}
+                  >
+                    {photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={photoUrl}
+                        alt={node.label}
+                        loading="lazy"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover object-center"
+                      />
+                    ) : (
+                      <div
+                        className="w-full h-full flex items-center justify-center"
+                        style={{ background: `${ringColor}22` }}
+                      >
+                        <NodeIcon type={node.type} size={36} />
+                      </div>
+                    )}
+                  </div>
+                  {photoUrl && photoAttribution && (
+                    <span
+                      className="text-[8px] font-mono text-text-dim text-center leading-tight max-w-24 line-clamp-2"
+                      title={photoAttribution}
                     >
-                      <NodeIcon type={node.type} size={36} />
-                    </div>
+                      {photoAttribution}
+                    </span>
                   )}
                 </div>
 
@@ -395,6 +519,11 @@ export function DetailPanel() {
                   <div className="text-[10px] font-mono text-text-muted mt-1">
                     {node.id}
                   </div>
+                  {unconfirmed && (
+                    <div className="mt-2">
+                      <ReviewBadge />
+                    </div>
+                  )}
                 </div>
 
                 <button
@@ -423,6 +552,10 @@ export function DetailPanel() {
                         key !== "tse_profile_urls" &&
                         key !== "wikipedia_url" &&
                         key !== "url" &&
+                        key !== "source_url" &&
+                        key !== "provenance_link" &&
+                        key !== "photo_attribution" &&
+                        key !== "photo_source" &&
                         key !== "active" &&
                         key !== "name",
                     )
@@ -461,12 +594,25 @@ export function DetailPanel() {
                 )}
               </div>
 
+              {sanctionConnections.length > 0 && (
+                <div className="py-3 border-t border-[#141414]">
+                  <h3 className="text-[9px] font-mono uppercase tracking-widest text-[#d98a4b] mb-2 px-4">
+                    Sanções ({sanctionConnections.length})
+                  </h3>
+                  <div>
+                    {sanctionConnections.map(({ node: sancNode, edge }) => (
+                      <SanctionItem key={`${sancNode.id}-${edge.id}`} node={sancNode} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="py-3">
                 <h3 className="text-[9px] font-mono uppercase tracking-widest text-text-muted mb-2 px-4">
                   Conexões{" "}
-                  {!isLoading && connectedNodes.length > 0 && (
+                  {!isLoading && otherConnections.length > 0 && (
                     <span className="text-text-muted">
-                      ({connectedNodes.length})
+                      ({otherConnections.length})
                     </span>
                   )}
                 </h3>
@@ -475,13 +621,20 @@ export function DetailPanel() {
                   <div className="px-4 py-3 text-xs font-mono text-text-muted">
                     Carregando...
                   </div>
-                ) : connectedNodes.length === 0 ? (
+                ) : isError ? (
+                  <div
+                    role="alert"
+                    className="px-4 py-3 text-xs font-mono text-text-muted"
+                  >
+                    Erro ao carregar conexões.
+                  </div>
+                ) : otherConnections.length === 0 ? (
                   <div className="px-4 py-3 text-xs font-mono text-text-muted">
                     Nenhuma conexão encontrada.
                   </div>
                 ) : (
                   <div>
-                    {connectedNodes.map(({ node: connNode, edge }) => (
+                    {otherConnections.map(({ node: connNode, edge }) => (
                       <ConnectedNodeItem
                         key={`${connNode.id}-${edge.id}`}
                         node={connNode}

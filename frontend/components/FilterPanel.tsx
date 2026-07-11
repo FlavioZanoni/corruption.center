@@ -78,17 +78,15 @@ function Section({
 }
 
 export function FilterPanel() {
-  const {
-    isFilterPanelOpen,
-    setFilterPanelOpen,
-    filters,
-    setNodeTypeFilter,
-    setEdgeStatusFilter,
-    setReliabilityFilter,
-    resetFilters,
-    layoutMode,
-    setLayoutMode,
-  } = useAppStore();
+  const isFilterPanelOpen = useAppStore((s) => s.isFilterPanelOpen);
+  const setFilterPanelOpen = useAppStore((s) => s.setFilterPanelOpen);
+  const filters = useAppStore((s) => s.filters);
+  const setNodeTypeFilter = useAppStore((s) => s.setNodeTypeFilter);
+  const setEdgeStatusFilter = useAppStore((s) => s.setEdgeStatusFilter);
+  const setReliabilityFilter = useAppStore((s) => s.setReliabilityFilter);
+  const resetFilters = useAppStore((s) => s.resetFilters);
+  const layoutMode = useAppStore((s) => s.layoutMode);
+  const setLayoutMode = useAppStore((s) => s.setLayoutMode);
 
   return (
     <>
@@ -165,6 +163,12 @@ export function FilterPanel() {
               checked={filters.nodeTypes.source}
               onChange={(v) => setNodeTypeFilter("source", v)}
               color={NODE_COLORS.source}
+            />
+            <Toggle
+              label="Sanções"
+              checked={filters.nodeTypes.sanction}
+              onChange={(v) => setNodeTypeFilter("sanction", v)}
+              color={NODE_COLORS.sanction}
             />
           </Section>
 

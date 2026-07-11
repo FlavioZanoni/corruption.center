@@ -1,26 +1,28 @@
 import type { GraphResponse, SearchResponse, NodeType } from "@/lib/types"
+import { fetchJson } from "@/lib/api/client"
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? ""
-
-function isSearchResponse(data: GraphResponse | SearchResponse): data is SearchResponse {
+function isSearchResponse(
+  data: GraphResponse | SearchResponse,
+): data is SearchResponse {
   return "results" in data && Array.isArray(data.results)
 }
 
 export async function searchNodes(
   query: string,
-  type?: NodeType
+  type?: NodeType,
 ): Promise<SearchResponse> {
   const params = new URLSearchParams({ q: query })
   if (type) params.set("type", type)
 
-  const res = await fetch(`${API_BASE}/api/v1/search?${params.toString()}`)
-  if (!res.ok) throw new Error(`Search API error ${res.status}: ${res.statusText}`)
-  const data = (await res.json()) as GraphResponse | SearchResponse
+  const data = await fetchJson<GraphResponse | SearchResponse>(
+    `/api/v1/search?${params.toString()}`,
+  )
 
   if (isSearchResponse(data)) {
     return data
   }
 
+  // Backend returns a GraphResponse — adapt it to the UI SearchResponse shape.
   const results = (data.nodes ?? []).map((node) => ({
     id: node.id,
     type: node.type,
@@ -28,8 +30,5 @@ export async function searchNodes(
     properties: node.properties,
   }))
 
-  return {
-    results,
-    total: results.length,
-  }
+  return { results, total: results.length }
 }

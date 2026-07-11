@@ -2,6 +2,8 @@ import type {
   GraphResponse,
   SearchResponse,
   TimelineResponse,
+  PoliticianListResponse,
+  PoliticianListItem,
 } from "@/lib/types"
 
 // ─── Nodes ────────────────────────────────────────────────────────────────────
@@ -364,6 +366,38 @@ export const MOCK_GRAPH: GraphResponse = {
         url: "https://portal.stf.jus.br/processos/detalhe.asp?incidente=4777687",
       },
     },
+
+    // Sanctions (official penalty registries)
+    {
+      id: "CEIS:2018-000123",
+      type: "sanction",
+      label: "CEIS",
+      properties: {
+        registry: "CEIS",
+        sanction_type: "inidoneidade",
+        organ: "Controladoria-Geral da União",
+        date_start: "2018-03-01",
+        date_end: "2023-03-01",
+        process_ref: "00190.000123/2018-01",
+        source_url: "https://www.portaltransparencia.gov.br/sancoes/ceis",
+        provenance_source: "sanctions",
+      },
+    },
+    {
+      id: "TCU:2016-045",
+      type: "sanction",
+      label: "TCU",
+      properties: {
+        registry: "TCU",
+        sanction_type: "inelegibilidade",
+        organ: "Tribunal de Contas da União",
+        date_start: "2016-05-10",
+        date_end: "2024-05-10",
+        process_ref: "TC 010.045/2016-7",
+        source_url: "https://contas.tcu.gov.br/",
+        provenance_source: "sanctions",
+      },
+    },
   ],
 
   edges: [
@@ -430,7 +464,62 @@ export const MOCK_GRAPH: GraphResponse = {
     { id: "e38", from: "leg-lj-principal", to: "scan-lava-jato", type: "INVESTIGATES", properties: { status: "membership", reliability: "high" } },
     { id: "e39", from: "leg-collor-imp", to: "scan-pcfish", type: "INVESTIGATES", properties: { status: "membership", reliability: "high" } },
     { id: "e40", from: "leg-cunha-cpc", to: "scan-lava-jato", type: "INVESTIGATES", properties: { status: "membership", reliability: "high" } },
+
+    // Sanctions (SANCTIONED_IN)
+    { id: "e41", from: "pol-maluf", to: "CEIS:2018-000123", type: "SANCTIONED_IN", properties: {} },
+    { id: "e42", from: "pol-cabral", to: "TCU:2016-045", type: "SANCTIONED_IN", properties: {} },
   ],
+}
+
+// ─── Politician browse (paginated) ────────────────────────────────────────────
+
+export function mockPoliticians(
+  filter: string,
+  party: string,
+  uf: string,
+  page: number,
+  pageSize: number,
+): PoliticianListResponse {
+  const f = filter.toLowerCase().trim()
+  const politicians = MOCK_GRAPH.nodes.filter((n) => n.type === "politician")
+
+  const filtered = politicians.filter((n) => {
+    const props = n.properties as Record<string, string | undefined>
+    if (f && !n.label.toLowerCase().includes(f)) return false
+    if (party && (props.party_current ?? "") !== party) return false
+    if (uf && (props.state ?? "") !== uf) return false
+    return true
+  })
+
+  const sorted = [...filtered].sort((a, b) => a.label.localeCompare(b.label))
+
+  const p = page < 1 ? 1 : page
+  const size = pageSize < 1 ? 24 : pageSize
+  const start = (p - 1) * size
+  const pageNodes = sorted.slice(start, start + size)
+
+  const items: PoliticianListItem[] = pageNodes.map((n) => {
+    const props = n.properties as Record<string, string | undefined>
+    const sanctionCount = MOCK_GRAPH.edges.filter(
+      (e) => e.from === n.id && e.type === "SANCTIONED_IN",
+    ).length
+    const proceedingCount = MOCK_GRAPH.edges.filter(
+      (e) => e.from === n.id && e.type === "DEFENDANT_IN",
+    ).length
+    return {
+      id: n.id,
+      name: n.label,
+      party_current: props.party_current ?? "",
+      role_current: props.role_current ?? "",
+      state: props.state ?? "",
+      photo_url: props.photo_url,
+      photo_attribution: props.photo_attribution,
+      sanction_count: sanctionCount,
+      proceeding_count: proceedingCount,
+    }
+  })
+
+  return { items, page: p, page_size: size, total: sorted.length }
 }
 
 // ─── Search index ─────────────────────────────────────────────────────────────

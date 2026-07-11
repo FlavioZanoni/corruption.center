@@ -12,6 +12,7 @@ const NODE_TYPE_LABELS: Record<string, string> = {
   scandal: "Escândalo",
   organization: "Organização",
   legal_proceeding: "Processo",
+  sanction: "Sanção",
 };
 
 // ─── Open-source credits modal ────────────────────────────────────────────────
@@ -207,8 +208,10 @@ function GitHubIcon({ size = 18 }: { size?: number }) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function SearchBar() {
-  const { toggleFilterPanel, setSelectedNode, setSearchQuery, searchQuery } =
-    useAppStore();
+  const toggleFilterPanel = useAppStore((s) => s.toggleFilterPanel);
+  const setSelectedNode = useAppStore((s) => s.setSelectedNode);
+  const setSearchQuery = useAppStore((s) => s.setSearchQuery);
+  const searchQuery = useAppStore((s) => s.searchQuery);
 
   const [inputValue, setInputValue] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -225,7 +228,7 @@ export function SearchBar() {
     [setSearchQuery],
   );
 
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, isError, refetch } = useQuery({
     queryKey: ["search", searchQuery],
     queryFn: () => searchNodes(searchQuery),
     enabled: searchQuery.trim().length >= 2,
@@ -233,6 +236,12 @@ export function SearchBar() {
   });
 
   const results = useMemo(() => data?.results ?? [], [data]);
+
+  // True while the user is still typing (debounce pending) or a request is in
+  // flight — lets us show "Buscando…" instead of a premature "no results".
+  const trimmedInput = inputValue.trim();
+  const isSearching =
+    trimmedInput.length >= 2 && (isFetching || searchQuery !== inputValue);
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -249,10 +258,10 @@ export function SearchBar() {
   );
 
   const handleFocus = useCallback(() => {
-    if (results.length > 0 && searchQuery.trim().length >= 2) {
+    if (inputValue.trim().length >= 2) {
       setIsDropdownOpen(true);
     }
-  }, [results.length, searchQuery]);
+  }, [inputValue]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -333,6 +342,11 @@ export function SearchBar() {
                 onKeyDown={handleKeyDown}
                 placeholder="Buscar político, escândalo ou organização..."
                 className="flex-1 bg-transparent text-text placeholder-text-dim text-sm outline-none caret-[#cc2222] font-mono"
+                role="combobox"
+                aria-label="Buscar político, escândalo ou organização"
+                aria-expanded={isDropdownOpen}
+                aria-controls="search-results"
+                aria-autocomplete="list"
               />
               {inputValue && (
                 <button
@@ -345,31 +359,74 @@ export function SearchBar() {
               )}
             </div>
 
-            {isDropdownOpen && results.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border rounded-sm overflow-hidden shadow-2xl max-h-80 overflow-y-auto">
-                {results.map((result) => (
-                  <button
-                    key={result.id}
-                    onClick={() => handleSelect(result)}
-                    className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-[#1a1a1a] text-left transition-colors group"
+            {isDropdownOpen && (
+              <div
+                id="search-results"
+                role="listbox"
+                aria-label="Resultados da busca"
+                className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border rounded-sm overflow-hidden shadow-2xl max-h-80 overflow-y-auto"
+              >
+                {isError ? (
+                  <div
+                    role="alert"
+                    className="flex items-center justify-between gap-3 px-3 py-2.5"
                   >
-                    <span
-                      className={`shrink-0 text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-sm mt-0.5 ${getTypeStyle(result.type)}`}
-                    >
-                      {NODE_TYPE_LABELS[result.type] ?? result.type}
+                    <span className="text-xs font-mono text-text-muted">
+                      Erro ao buscar.
                     </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-text text-sm font-serif leading-tight truncate">
-                        {result.label}
-                      </div>
-                      {result.snippet && (
-                        <div className="text-text-muted text-xs mt-0.5 line-clamp-2 font-mono">
-                          {result.snippet}
+                    <button
+                      onClick={() => refetch()}
+                      className="text-[10px] font-mono uppercase tracking-wider text-text-muted hover:text-text border border-border rounded-sm px-2 py-1 transition-colors shrink-0"
+                    >
+                      Tentar novamente
+                    </button>
+                  </div>
+                ) : results.length > 0 ? (
+                  results.map((result) => (
+                    <button
+                      key={result.id}
+                      role="option"
+                      aria-selected={false}
+                      onClick={() => handleSelect(result)}
+                      className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-[#1a1a1a] text-left transition-colors group"
+                    >
+                      <span
+                        className={`shrink-0 text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-sm mt-0.5 ${getTypeStyle(result.type)}`}
+                      >
+                        {NODE_TYPE_LABELS[result.type] ?? result.type}
+                      </span>
+                      {typeof result.properties?.photo_url === "string" &&
+                        result.properties.photo_url && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={result.properties.photo_url}
+                            alt=""
+                            className="shrink-0 w-8 h-8 rounded object-cover"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          />
+                        )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-text text-sm font-serif leading-tight truncate">
+                          {result.label}
                         </div>
-                      )}
-                    </div>
-                  </button>
-                ))}
+                        {result.snippet && (
+                          <div className="text-text-muted text-xs mt-0.5 line-clamp-2 font-mono">
+                            {result.snippet}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))
+                ) : isSearching ? (
+                  <div className="px-3 py-2.5 text-xs font-mono text-text-muted">
+                    Buscando…
+                  </div>
+                ) : (
+                  <div className="px-3 py-2.5 text-xs font-mono text-text-muted">
+                    Nenhum resultado encontrado
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -409,6 +466,8 @@ function getTypeStyle(type: string): string {
       return "bg-[#0a2a1a] text-[#22aa66] border border-[#1a4a2a]";
     case "legal_proceeding":
       return "bg-[#1a0a3a] text-[#8844cc] border border-[#2a1a5a]";
+    case "sanction":
+      return "bg-[#2a1a0a] text-[#d98a4b] border border-[#4a2a10]";
     default:
       return "bg-[#1a1a1a] text-text-muted border border-[#333333]";
   }

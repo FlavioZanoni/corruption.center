@@ -6,6 +6,7 @@ const LEGEND_ENTRIES = [
   { kind: "node", color: "#5b9bd5", label: "Organização" },
   { kind: "node", color: "#8b7ec8", label: "Processo judicial" },
   { kind: "node", color: "#7a7a7a", label: "Fonte" },
+  { kind: "node", color: "#d98a4b", label: "Sanção" },
   // edge statuses
   {
     kind: "edge",

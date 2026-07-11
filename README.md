@@ -25,6 +25,23 @@ Current compatibility notes:
 
 - Search: frontend adapter accepts backend `GraphResponse` and maps it to UI `SearchResponse`.
 - Timeline: frontend sends `from`/`to` as `YYYY-MM-DD`, matching Go API expectations.
+- Sanctions (additive): `Sanction` nodes and `SANCTIONED_IN` edges now surface in
+  search and politician graph traversal. They flow through the existing
+  `GraphResponse`/`SearchResponse` shapes unchanged — a new node `type` value
+  (`"sanction"`) and edge type (`"SANCTIONED_IN"`) are the only additions.
+  Existing adapters keep working; unknown types simply render with the new
+  sanction styling. Every sanction carries a `source_url` deep link, and the UI
+  shows the "não confirmado — pendente de revisão" label on machine-linked
+  (unconfirmed) sanctions/nodes per `docs/legal_compliance.md`.
+- Politician browse (additive): `GET /api/v1/politicians?filter=&party=&uf=&page=&page_size=`
+  returns a paginated `PoliticianListResponse` (`items`, `page`, `page_size`,
+  `total`) with `photo_url`/`photo_attribution` and cheap `sanction_count`/
+  `proceeding_count`. Backs the `/politicos` browse page so a fresh install (only
+  politicians, no scandals) still has content. Mock mode implements the same
+  endpoint under `frontend/app/api/v1/politicians`.
+- Photos: `photo_url` is always an absolute external URL (TSE, Câmara/Senado,
+  Wikimedia Commons); the frontend renders it with `loading="lazy"` +
+  `referrerPolicy="no-referrer"` and shows `photo_attribution` as a credit line.
 
 ## Dev Stack (API, Frontend, DBs, Workers)
 
