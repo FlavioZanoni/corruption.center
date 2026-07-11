@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: corruption
       POSTGRES_DB: corruption
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
     healthcheck:
@@ -62,12 +62,15 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8080
+      # pnpm 11 runs a deps check before `pnpm dev`; CI=true makes it
+      # auto-confirm instead of aborting on the container's missing TTY
+      CI: "true"
     ports:
       - "3000:3000"
     volumes:
       - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
     depends_on:
       - api
     command: ["pnpm", "dev"]
@@ -136,6 +139,87 @@ services:
         condition: service_healthy
     command: ["sh", "-lc", "apk add --no-cache bash netcat-openbsd postgresql-client >/dev/null 2>&1; export PATH=/usr/local/go/bin:$PATH; ./deploy/datajud-watcher.sh"]
 
+  djen-sync:
+    image: golang:1.25-alpine
+    profiles: ["workers"]
+    restart: "no"
+    working_dir: /workspace/backend
+    volumes:
+      - ./:/workspace
+    environment:
+      DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
+      MEMGRAPH_URI: bolt://memgraph:7687
+      MEMGRAPH_USER: ${MEMGRAPH_USER:-}
+      MEMGRAPH_PASS: ${MEMGRAPH_PASS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    command: ["sh", "-lc", "apk add --no-cache bash netcat-openbsd postgresql-client >/dev/null 2>&1; export PATH=/usr/local/go/bin:$PATH; go run ./workers/djen/cmd"]
+
+  sanctions-sync:
+    image: golang:1.25-alpine
+    profiles: ["workers"]
+    restart: "no"
+    working_dir: /workspace/backend
+    volumes:
+      - ./:/workspace
+    environment:
+      DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
+      MEMGRAPH_URI: bolt://memgraph:7687
+      MEMGRAPH_USER: ${MEMGRAPH_USER:-}
+      MEMGRAPH_PASS: ${MEMGRAPH_PASS:-}
+      TRANSPARENCIA_API_KEY: ${TRANSPARENCIA_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    command: ["sh", "-lc", "apk add --no-cache bash netcat-openbsd postgresql-client >/dev/null 2>&1; export PATH=/usr/local/go/bin:$PATH; go run ./workers/sanctions/cmd"]
+
+  cnpj-enricher:
+    image: golang:1.25-alpine
+    profiles: ["workers"]
+    restart: "no"
+    working_dir: /workspace/backend
+    volumes:
+      - ./:/workspace
+    environment:
+      DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
+      MEMGRAPH_URI: bolt://memgraph:7687
+      MEMGRAPH_USER: ${MEMGRAPH_USER:-}
+      MEMGRAPH_PASS: ${MEMGRAPH_PASS:-}
+      CNPJ_API_BASE: ${CNPJ_API_BASE:-https://minhareceita.org}
+      CNPJ_RATE_PER_MIN: ${CNPJ_RATE_PER_MIN:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    command: ["sh", "-lc", "apk add --no-cache bash netcat-openbsd postgresql-client >/dev/null 2>&1; export PATH=/usr/local/go/bin:$PATH; go run ./workers/cnpj/cmd"]
+
+  photos-enricher:
+    image: golang:1.25-alpine
+    profiles: ["workers"]
+    restart: "no"
+    working_dir: /workspace/backend
+    volumes:
+      - ./:/workspace
+    environment:
+      DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
+      MEMGRAPH_URI: bolt://memgraph:7687
+      MEMGRAPH_USER: ${MEMGRAPH_USER:-}
+      MEMGRAPH_PASS: ${MEMGRAPH_PASS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    command: ["sh", "-lc", "apk add --no-cache bash netcat-openbsd postgresql-client >/dev/null 2>&1; export PATH=/usr/local/go/bin:$PATH; go run ./workers/photos/cmd"]
+
 volumes:
   postgres_dev_data:
   memgraph_dev_data:
+  frontend_node_modules:
+  frontend_next:
