@@ -46,7 +46,8 @@ func (db *DB) QueryPoliticianGraph(ctx context.Context, id string) (*models.Grap
     OPTIONAL MATCH (p)-[d:DEFENDANT_IN]->(lp:LegalProceeding)
     OPTIONAL MATCH (p)-[m:MEMBER_OF]->(o:Organization)
     OPTIONAL MATCH (p)-[c:CONTROLS]->(o2:Organization)
-    RETURN p, r, s, d, lp, m, o, c, o2
+    OPTIONAL MATCH (p)-[sanc:SANCTIONED_IN]->(san:Sanction)
+    RETURN p, r, s, d, lp, m, o, c, o2, sanc, san
   `, map[string]any{"id": id})
 	if err != nil {
 		return nil, fmt.Errorf("memgraph: query politician graph: %w", err)
@@ -188,6 +189,9 @@ func neoNodeToModel(n neo4j.Node) models.Node {
 		name = strProp(n.Props, "case_number")
 	}
 	if name == "" {
+		name = strProp(n.Props, "registry")
+	}
+	if name == "" {
 		name = id
 	}
 
@@ -222,16 +226,18 @@ func neoRelToModel(r neo4j.Relationship, elementToDomainID map[string]string) mo
 func nodeToPolit(n neo4j.Node) *models.Politician {
 	p := n.Props
 	return &models.Politician{
-		ID:             strProp(p, "id"),
-		Name:           strProp(p, "name"),
-		CPF:            strProp(p, "cpf"),
-		NameAliases:    strSliceProp(p, "name_aliases"),
-		PartyCurrent:   strProp(p, "party_current"),
-		RoleCurrent:    strProp(p, "role_current"),
-		State:          strProp(p, "state"),
-		TSEProfileURLs: strSliceProp(p, "tse_profile_urls"),
-		PhotoURL:       strProp(p, "photo_url"),
-		Active:         boolProp(p, "active"),
+		ID:               strProp(p, "id"),
+		Name:             strProp(p, "name"),
+		CPF:              strProp(p, "cpf"),
+		NameAliases:      strSliceProp(p, "name_aliases"),
+		PartyCurrent:     strProp(p, "party_current"),
+		RoleCurrent:      strProp(p, "role_current"),
+		State:            strProp(p, "state"),
+		TSEProfileURLs:   strSliceProp(p, "tse_profile_urls"),
+		PhotoURL:         strProp(p, "photo_url"),
+		PhotoSource:      strProp(p, "photo_source"),
+		PhotoAttribution: strProp(p, "photo_attribution"),
+		Active:           boolProp(p, "active"),
 	}
 }
 
@@ -264,6 +270,8 @@ func labelToNodeType(label string) models.NodeType {
 		return models.NodeTypeLegalProceeding
 	case "source":
 		return models.NodeTypeSource
+	case "sanction":
+		return models.NodeTypeSanction
 	default:
 		return models.NodeType(strings.ToLower(label))
 	}

@@ -25,6 +25,7 @@ definitions:
     - INVESTIGATES
     - RELATED_TO
     - SUPPORTS
+    - SANCTIONED_IN
     type: string
     x-enum-varnames:
     - EdgeTypeInvolvedIn
@@ -36,6 +37,7 @@ definitions:
     - EdgeTypeInvestigates
     - EdgeTypeRelatedTo
     - EdgeTypeSupports
+    - EdgeTypeSanctionedIn
   models.ErrorResponse:
     properties:
       error:
@@ -72,6 +74,7 @@ definitions:
     - organization
     - legal_proceeding
     - source
+    - sanction
     type: string
     x-enum-varnames:
     - NodeTypePolitician
@@ -80,6 +83,7 @@ definitions:
     - NodeTypeOrganization
     - NodeTypeLegalProceeding
     - NodeTypeSource
+    - NodeTypeSanction
   models.Politician:
     properties:
       active:
@@ -96,6 +100,10 @@ definitions:
         type: array
       party_current:
         type: string
+      photo_attribution:
+        type: string
+      photo_source:
+        type: string
       photo_url:
         type: string
       role_current:
@@ -106,6 +114,40 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  models.PoliticianListItem:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      party_current:
+        type: string
+      photo_attribution:
+        type: string
+      photo_url:
+        type: string
+      proceeding_count:
+        type: integer
+      role_current:
+        type: string
+      sanction_count:
+        type: integer
+      state:
+        type: string
+    type: object
+  models.PoliticianListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/models.PoliticianListItem'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
     type: object
   models.PoliticianProfileResponse:
     properties:
@@ -287,6 +329,45 @@ paths:
       summary: Politician profile
       tags:
       - politician
+  /politicians:
+    get:
+      description: Paginated, filterable list of politicians. Gives a fresh install
+        content to explore even before any scandals exist.
+      parameters:
+      - description: Case-insensitive name substring
+        in: query
+        name: filter
+        type: string
+      - description: Exact party filter (party_current)
+        in: query
+        name: party
+        type: string
+      - description: Exact state/UF filter (state)
+        in: query
+        name: uf
+        type: string
+      - description: Page number (1-based, default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 24, max 100)
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.PoliticianListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Browse politicians
+      tags:
+      - politician
   /scandal/{id}:
     get:
       description: Returns full scandal profile with all graph connections
@@ -316,14 +397,15 @@ paths:
       - scandal
   /search:
     get:
-      description: Search across politicians, scandals and organizations
+      description: Search across politicians, persons, scandals, organizations and
+        sanctions
       parameters:
       - description: Search query
         in: query
         name: q
         required: true
         type: string
-      - description: 'Node type filter: politician|person|scandal|organization'
+      - description: 'Node type filter: politician|person|scandal|organization|sanction'
         in: query
         name: type
         type: string

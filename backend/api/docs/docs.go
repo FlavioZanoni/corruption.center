@@ -205,6 +205,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/politicians": {
+            "get": {
+                "description": "Paginated, filterable list of politicians. Gives a fresh install content to explore even before any scandals exist.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "politician"
+                ],
+                "summary": "Browse politicians",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive name substring",
+                        "name": "filter",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact party filter (party_current)",
+                        "name": "party",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact state/UF filter (state)",
+                        "name": "uf",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (1-based, default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 24, max 100)",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.PoliticianListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/scandal/{id}": {
             "get": {
                 "description": "Returns full scandal profile with all graph connections",
@@ -248,7 +306,7 @@ const docTemplate = `{
         },
         "/search": {
             "get": {
-                "description": "Search across politicians, scandals and organizations",
+                "description": "Search across politicians, persons, scandals, organizations and sanctions",
                 "produces": [
                     "application/json"
                 ],
@@ -266,7 +324,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Node type filter: politician|person|scandal|organization",
+                        "description": "Node type filter: politician|person|scandal|organization|sanction",
                         "name": "type",
                         "in": "query"
                     }
@@ -375,7 +433,8 @@ const docTemplate = `{
                 "IMPLICATED_IN",
                 "INVESTIGATES",
                 "RELATED_TO",
-                "SUPPORTS"
+                "SUPPORTS",
+                "SANCTIONED_IN"
             ],
             "x-enum-varnames": [
                 "EdgeTypeInvolvedIn",
@@ -386,7 +445,8 @@ const docTemplate = `{
                 "EdgeTypeImplicatedIn",
                 "EdgeTypeInvestigates",
                 "EdgeTypeRelatedTo",
-                "EdgeTypeSupports"
+                "EdgeTypeSupports",
+                "EdgeTypeSanctionedIn"
             ]
         },
         "models.ErrorResponse": {
@@ -440,7 +500,8 @@ const docTemplate = `{
                 "scandal",
                 "organization",
                 "legal_proceeding",
-                "source"
+                "source",
+                "sanction"
             ],
             "x-enum-varnames": [
                 "NodeTypePolitician",
@@ -448,7 +509,8 @@ const docTemplate = `{
                 "NodeTypeScandal",
                 "NodeTypeOrganization",
                 "NodeTypeLegalProceeding",
-                "NodeTypeSource"
+                "NodeTypeSource",
+                "NodeTypeSanction"
             ]
         },
         "models.Politician": {
@@ -475,6 +537,12 @@ const docTemplate = `{
                 "party_current": {
                     "type": "string"
                 },
+                "photo_attribution": {
+                    "type": "string"
+                },
+                "photo_source": {
+                    "type": "string"
+                },
                 "photo_url": {
                     "type": "string"
                 },
@@ -489,6 +557,58 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "models.PoliticianListItem": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "party_current": {
+                    "type": "string"
+                },
+                "photo_attribution": {
+                    "type": "string"
+                },
+                "photo_url": {
+                    "type": "string"
+                },
+                "proceeding_count": {
+                    "type": "integer"
+                },
+                "role_current": {
+                    "type": "string"
+                },
+                "sanction_count": {
+                    "type": "integer"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.PoliticianListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.PoliticianListItem"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },

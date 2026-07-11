@@ -24,6 +24,8 @@ func (db *DB) QuerySearch(ctx context.Context, q string, nodeType string) (*mode
 		result, err = searchScandals(ctx, session, q)
 	case "organization":
 		result, err = searchOrganizations(ctx, session, q)
+	case "sanction":
+		result, err = searchSanctions(ctx, session, q)
 	default:
 		// no type filter — search all
 		result, err = searchAll(ctx, session, q)
@@ -42,7 +44,8 @@ func searchPersons(ctx context.Context, session neo4j.SessionWithContext, q stri
     WHERE toLower(node.name) CONTAINS toLower($q)
     OPTIONAL MATCH (node)-[r:INVOLVED_IN]->(s:Scandal)
     OPTIONAL MATCH (node)-[d:DEFENDANT_IN]->(lp:LegalProceeding)
-    RETURN node, r, s, d, lp
+    OPTIONAL MATCH (node)-[sanc:SANCTIONED_IN]->(san:Sanction)
+    RETURN node, r, s, d, lp, sanc, san
     LIMIT 20
   `, map[string]any{"q": q})
 }
@@ -53,7 +56,8 @@ func searchPoliticians(ctx context.Context, session neo4j.SessionWithContext, q 
     WHERE toLower(node.name) CONTAINS toLower($q)
        OR ANY(alias IN coalesce(node.name_aliases, []) WHERE toLower(alias) CONTAINS toLower($q))
     OPTIONAL MATCH (node)-[r:INVOLVED_IN]->(s:Scandal)
-    RETURN node, r, s
+    OPTIONAL MATCH (node)-[sanc:SANCTIONED_IN]->(san:Sanction)
+    RETURN node, r, s, sanc, san
     LIMIT 20
   `, map[string]any{"q": q})
 }
@@ -75,7 +79,21 @@ func searchOrganizations(ctx context.Context, session neo4j.SessionWithContext, 
     MATCH (node:Organization)
     WHERE toLower(node.name) CONTAINS toLower($q)
     OPTIONAL MATCH (node)-[r:IMPLICATED_IN]->(s:Scandal)
-    RETURN node, r, s
+    OPTIONAL MATCH (node)-[sanc:SANCTIONED_IN]->(san:Sanction)
+    RETURN node, r, s, sanc, san
+    LIMIT 20
+  `, map[string]any{"q": q})
+}
+
+func searchSanctions(ctx context.Context, session neo4j.SessionWithContext, q string) (neo4j.ResultWithContext, error) {
+	return session.Run(ctx, `
+    MATCH (node:Sanction)
+    WHERE toLower(coalesce(node.registry, "")) CONTAINS toLower($q)
+       OR toLower(coalesce(node.sanction_type, "")) CONTAINS toLower($q)
+       OR toLower(coalesce(node.organ, "")) CONTAINS toLower($q)
+       OR toLower(coalesce(node.process_ref, "")) CONTAINS toLower($q)
+    OPTIONAL MATCH (subj)-[r:SANCTIONED_IN]->(node)
+    RETURN node, r, subj
     LIMIT 20
   `, map[string]any{"q": q})
 }
@@ -88,6 +106,7 @@ func searchAll(ctx context.Context, session neo4j.SessionWithContext, q string) 
       OR (node:Person AND toLower(node.name) CONTAINS toLower($q))
       OR (node:Scandal AND (toLower(node.name) CONTAINS toLower($q) OR ANY(alias IN coalesce(node.aliases, []) WHERE toLower(alias) CONTAINS toLower($q))))
       OR (node:Organization AND toLower(node.name) CONTAINS toLower($q))
+      OR (node:Sanction AND (toLower(coalesce(node.registry, "")) CONTAINS toLower($q) OR toLower(coalesce(node.organ, "")) CONTAINS toLower($q) OR toLower(coalesce(node.sanction_type, "")) CONTAINS toLower($q)))
     )
     RETURN node
     LIMIT 20

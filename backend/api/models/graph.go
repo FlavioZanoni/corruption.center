@@ -9,6 +9,7 @@ const (
 	NodeTypeOrganization    NodeType = "organization"
 	NodeTypeLegalProceeding NodeType = "legal_proceeding"
 	NodeTypeSource          NodeType = "source"
+	NodeTypeSanction        NodeType = "sanction"
 )
 
 type EdgeType string
@@ -23,6 +24,7 @@ const (
 	EdgeTypeInvestigates EdgeType = "INVESTIGATES"
 	EdgeTypeRelatedTo    EdgeType = "RELATED_TO"
 	EdgeTypeSupports     EdgeType = "SUPPORTS"
+	EdgeTypeSanctionedIn EdgeType = "SANCTIONED_IN"
 )
 
 // Node is the generic graph node returned to the frontend.

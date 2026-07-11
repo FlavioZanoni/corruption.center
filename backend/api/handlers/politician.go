@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"corruption-center/api/models"
 	"corruption-center/api/services"
@@ -49,4 +50,34 @@ func (h *PoliticianHandler) GetPolitician(c *gin.Context) {
 		Politician:  politician,
 		Connections: connections,
 	})
+}
+
+// ListPoliticians godoc
+// @Summary      Browse politicians
+// @Description  Paginated, filterable list of politicians. Gives a fresh install content to explore even before any scandals exist.
+// @Tags         politician
+// @Produce      json
+// @Param        filter  query     string  false  "Case-insensitive name substring"
+// @Param        party   query     string  false  "Exact party filter (party_current)"
+// @Param        uf      query     string  false  "Exact state/UF filter (state)"
+// @Param        page    query     int     false  "Page number (1-based, default 1)"
+// @Param        page_size query   int     false  "Items per page (default 24, max 100)"
+// @Success      200  {object}  models.PoliticianListResponse
+// @Failure      500  {object}  models.ErrorResponse
+// @Router       /politicians [get]
+func (h *PoliticianHandler) ListPoliticians(c *gin.Context) {
+	filter := c.Query("filter")
+	party := c.Query("party")
+	uf := c.Query("uf")
+
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("page_size"))
+
+	list, err := h.service.ListPoliticians(c.Request.Context(), filter, party, uf, page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, list)
 }

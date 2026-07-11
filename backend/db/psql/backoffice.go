@@ -29,19 +29,28 @@ type WorkerLogEntry struct {
 	Details         string
 }
 
-func (db *DB) ListPendingReviews(ctx context.Context, status string, limit int) ([]PendingReviewItem, error) {
+// ReviewTypeCount is the number of pending reviews carrying a given type. Used
+// by the dashboard to show the review backlog broken down by type.
+type ReviewTypeCount struct {
+	Type  string
+	Count int
+}
+
+func (db *DB) ListPendingReviews(ctx context.Context, status, typ string, limit int) ([]PendingReviewItem, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 	status = strings.TrimSpace(status)
+	typ = strings.TrimSpace(typ)
 
 	rows, err := db.conn.Query(ctx, `
     SELECT id::text, type, payload::text, worker, status, created_at, reviewed_by, reviewed_at
     FROM pending_review
     WHERE ($1 = '' OR status = $1)
+      AND ($2 = '' OR type = $2)
     ORDER BY created_at DESC
-    LIMIT $2
-  `, status, limit)
+    LIMIT $3
+  `, status, typ, limit)
 	if err != nil {
 		return nil, fmt.Errorf("psql: list pending reviews: %w", err)
 	}
@@ -59,6 +68,50 @@ func (db *DB) ListPendingReviews(ctx context.Context, status string, limit int) 
 		return nil, fmt.Errorf("psql: iterate pending reviews: %w", err)
 	}
 	return out, nil
+}
+
+// CountPendingReviewsByType returns the count of pending (status='pending')
+// reviews grouped by type, most numerous first, for the dashboard backlog view.
+func (db *DB) CountPendingReviewsByType(ctx context.Context) ([]ReviewTypeCount, error) {
+	rows, err := db.conn.Query(ctx, `
+    SELECT type, count(*)::int
+    FROM pending_review
+    WHERE status = 'pending'
+    GROUP BY type
+    ORDER BY count(*) DESC, type ASC
+  `)
+	if err != nil {
+		return nil, fmt.Errorf("psql: count pending reviews by type: %w", err)
+	}
+	defer rows.Close()
+
+	out := []ReviewTypeCount{}
+	for rows.Next() {
+		var c ReviewTypeCount
+		if err := rows.Scan(&c.Type, &c.Count); err != nil {
+			return nil, fmt.Errorf("psql: scan review type count: %w", err)
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("psql: iterate review type counts: %w", err)
+	}
+	return out, nil
+}
+
+// GetPendingReview fetches a single pending_review row by id. Used by the
+// backoffice approval path to read the payload before registering a case.
+func (db *DB) GetPendingReview(ctx context.Context, id string) (PendingReviewItem, error) {
+	var item PendingReviewItem
+	err := db.conn.QueryRow(ctx, `
+    SELECT id::text, type, payload::text, worker, status, created_at, reviewed_by, reviewed_at
+    FROM pending_review
+    WHERE id = $1::uuid
+  `, id).Scan(&item.ID, &item.Type, &item.Payload, &item.Worker, &item.Status, &item.CreatedAt, &item.ReviewedBy, &item.ReviewedAt)
+	if err != nil {
+		return PendingReviewItem{}, fmt.Errorf("psql: get pending review: %w", err)
+	}
+	return item, nil
 }
 
 func (db *DB) UpdatePendingReviewStatus(ctx context.Context, id string, status string, reviewedBy string) error {

@@ -21,7 +21,20 @@ type Repository interface {
 	// search
 	QuerySearch(ctx context.Context, q string, nodeType string) (*models.GraphResponse, error)
 
+	// browse
+	QueryPoliticians(ctx context.Context, filter, party, uf string, page, pageSize int) (*models.PoliticianListResponse, error)
+
 	// backoffice writes
 	UpsertLegalProceedingByCase(ctx context.Context, p DataJudProceedingUpsert) (string, error)
 	EnsureInvestigatesEdge(ctx context.Context, proceedingID, scandalID string) error
+
+	// backoffice: scandal selector, provenance display and Person purge
+	ListScandals(ctx context.Context) ([]ScandalOption, error)
+	GetNodeProvenance(ctx context.Context, id string) (*NodeProvenance, error)
+	PurgePersonNode(ctx context.Context, id string) (*NodeProvenance, error)
+
+	// backoffice: human-confirmed edges written when a review is approved
+	EnsurePoliticianDefendantEdge(ctx context.Context, politicianID, proceedingID string) error
+	EnsurePoliticianControlsOrganization(ctx context.Context, politicianID, organizationID string) error
+	EnsurePoliticianSanctionedInEdge(ctx context.Context, politicianID, sanctionID string) error
 }
