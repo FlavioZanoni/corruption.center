@@ -5,15 +5,23 @@ Spec: `docs/workerDetails/TSE.md`.
 
 ## What It Does
 
-- Processes yearly `votacao_candidato_munzona_{year}.zip` and `consulta_cand_{year}.zip`.
-- Reads `_BR` and per-UF files, joining on `SQ_CANDIDATO`.
+- Processes a single yearly `consulta_cand_{year}.zip` (about 4MB zipped): 28 CSVs,
+  one per state plus a national `_BR` file carrying Presidente/Vice-Presidente.
+- There is no second file and no join: `consulta_cand` already carries the office
+  (`DS_CARGO`), the result (`DS_SIT_TOT_TURNO`), the state, the party, the names
+  and the CPF. The `votacao_candidato_munzona` files this importer used to also
+  require added nothing but vote tallies, which this project does not use, and
+  cost 552MB zipped per year against 4MB here; unzipping them exhausted the disk
+  and made the 2022 import fail outright, so they were dropped entirely.
 - Keeps only winners by rule:
   - `DS_CARGO` in `PRESIDENTE`, `VICE-PRESIDENTE`, `SENADOR`, `DEPUTADO FEDERAL`,
     `GOVERNADOR`, `VICE-GOVERNADOR`, `DEPUTADO ESTADUAL`, `DEPUTADO DISTRITAL`
-    (`allowedCargos` in `importer.go`; the `_BR` file is not cargo-filtered, it carries
-    Presidente rows only)
-  - `DS_SIT_TOT_TURNO` in `ELEITO`, `ELEITO POR QP`, `ELEITO POR MÉDIA`
-  - highest `NR_TURNO` per `SQ_CANDIDATO`
+    (`allowedCargos` in `importer.go`; applied to every file, including `_BR`)
+  - `DS_SIT_TOT_TURNO` in `ELEITO`, `ELEITO POR QP`, `ELEITO POR MÉDIA` (plus the
+    legacy spellings `MÉDIA`, `MEDIA`, `QP`, `ELEITO POR MEDIA`)
+  - highest `NR_TURNO` per `(SG_UF, SQ_CANDIDATO)` (`candidateKey`, `keepLatestTurn`):
+    `SQ_CANDIDATO` alone is not unique across states in the older files, so winners
+    are deduplicated by state and SQ together, not by SQ alone
 - Produces records with:
   - `active: false`
   - `tse_profile_urls: []string`
@@ -43,19 +51,18 @@ go run ./workers/tse/cmd \
 
 If you are at repo root, run `cd backend` first.
 
-By default, ZIP files are downloaded from official TSE URLs and cached under
-`<workdir>/tse-downloads`.
+By default, the `consulta_cand_{year}.zip` file is downloaded from the official TSE URL
+and cached under `<workdir>/tse-downloads`.
 
 ### Downloads: retry with Range resume
 
-The TSE CDN routinely resets these multi-hundred-MB zips mid-transfer, so a single `GET`
-with no retry just died partway through and failed the year. `downloadFileIfMissing` now
-retries up to `downloadRetries` (6) times, and each attempt **resumes** the partial
-`.tmp` with an HTTP `Range: bytes=<have>-` request (`resumeDownload`) instead of starting
-over; a server answering `200` instead of `206` restarts from zero. Backoff between
-attempts is 2s, 4s, 6s, … The `.tmp` is renamed to its final name only after the body was
-copied cleanly, so a cached file is always a complete file. Progress and each interruption
-are logged to stderr.
+At about 4MB zipped, the file is small enough that a plain `GET` usually succeeds in one
+shot, but `downloadFileIfMissing` still retries up to `downloadRetries` (6) times, and
+each attempt **resumes** the partial `.tmp` with an HTTP `Range: bytes=<have>-` request
+(`resumeDownload`) instead of starting over; a server answering `200` instead of `206`
+restarts from zero. Backoff between attempts is 2s, 4s, 6s, … The `.tmp` is renamed to
+its final name only after the body was copied cleanly, so a cached file is always a
+complete file. Progress and each interruption are logged to stderr.
 
 Range mode (directory with all yearly zip files):
 
@@ -67,7 +74,7 @@ go run ./workers/tse/cmd \
 ```
 
 All-years mode (every even year from 2002 to the latest election year). `--zip-dir` is
-optional: without it, each year's zips are downloaded (with Range resume) and cached in
+optional: without it, each year's zip is downloaded (with Range resume) and cached in
 `<workdir>/tse-downloads`.
 
 ```bash
@@ -98,7 +105,7 @@ Optional flags:
 - `--min-disk-mb` minimum free disk required (default `512`)
 - `--min-mem-mb` minimum available memory required (default `256`)
 - `--zip-dir` directory mode for range/all
-- `--votacao-zip` and `--consulta-zip` optional overrides for single-year mode
+- `--consulta-zip` optional override for single-year mode
 - `--from-year` / `--to-year` range mode (inclusive)
 - `--all-years` runs every even year from 2002 to the latest election year
 - `--persist-db` writes imported records to Postgres/Memgraph

@@ -85,6 +85,7 @@ type PoliticianRecord struct {
 
 type winnerRow struct {
 	SQ           string
+	CPF          string
 	ElectionYear string
 	Turn         int
 	UF           string
@@ -106,69 +107,31 @@ func candidateKey(uf, sq string) string {
 	return strings.ToUpper(strings.TrimSpace(uf)) + "|" + strings.TrimSpace(sq)
 }
 
-// cpfIndex resolves a candidate's CPF, preferring the collision-proof (UF, SQ)
-// key and falling back to SQ alone only when that SQ is unambiguous across the
-// whole file set. The fallback exists for PRESIDENTE: the consulta row lives in
-// the national file (SG_UF "BR") while the votação rows are per state, so the two
-// sides disagree on UF and only the SQ can join them.
-type cpfIndex struct {
-	byKey     map[string]string
-	bySQ      map[string]string
-	ambiguous map[string]bool
-}
-
-func newCPFIndex() *cpfIndex {
-	return &cpfIndex{
-		byKey:     map[string]string{},
-		bySQ:      map[string]string{},
-		ambiguous: map[string]bool{},
-	}
-}
-
-func (c *cpfIndex) add(uf, sq, cpf string) {
-	sq = strings.TrimSpace(sq)
-	if sq == "" {
-		return
-	}
-	c.byKey[candidateKey(uf, sq)] = cpf
-	if prev, seen := c.bySQ[sq]; seen && prev != cpf {
-		// The same SQ carries different CPFs: joining on SQ alone would pick a
-		// person at random, so refuse to use it as a fallback.
-		c.ambiguous[sq] = true
-		return
-	}
-	c.bySQ[sq] = cpf
-}
-
-func (c *cpfIndex) lookup(uf, sq string) string {
-	if cpf, ok := c.byKey[candidateKey(uf, sq)]; ok {
-		return cpf
-	}
-	if c.ambiguous[sq] {
-		return ""
-	}
-	return c.bySQ[sq]
-}
-
 type ImportOptions struct {
 	MinDiskBytes uint64
 	MinMemBytes  uint64
 }
 
-func ImportYear(electionsCSV io.Reader, candidatesCSV io.Reader) (*ImportResult, error) {
-	winners, stats, err := readWinnersFromReader(electionsCSV, true)
+// ImportYear reads a single consulta_cand CSV and returns the elected officials
+// in it.
+//
+// The votacao_candidato_munzona files used to be required as well, joined on
+// SQ_CANDIDATO, but they were never needed: consulta_cand already states the
+// office (DS_CARGO), the result (DS_SIT_TOT_TURNO), the state, the party, the
+// names and the CPF. The votacao files only add vote tallies, which this project
+// does not use, and they cost 552MB zipped per year (multiple GB unzipped)
+// against 4MB for consulta_cand. Dropping them removed the disk pressure that
+// made the 2022 import fail outright.
+func ImportYear(consultaCSV io.Reader) (*ImportResult, error) {
+	winners, stats, err := readWinnersFromReader(consultaCSV)
 	if err != nil {
 		return nil, err
 	}
-	cpfs, candidateRows, err := readCPFsFromReader(candidatesCSV, winners)
-	if err != nil {
-		return nil, err
-	}
-	stats.CandidateRowsRead = candidateRows
-	return buildResult(winners, cpfs, stats), nil
+	stats.WinningCandidates = len(winners)
+	return buildResult(winners, stats), nil
 }
 
-func ImportYearFromZipFiles(year int, votacaoZipPath, consultaZipPath, workDir string, opts ImportOptions) (*ImportResult, error) {
+func ImportYearFromZipFiles(year int, consultaZipPath, workDir string, opts ImportOptions) (*ImportResult, error) {
 	if strings.TrimSpace(workDir) == "" {
 		workDir = os.TempDir()
 	}
@@ -192,46 +155,20 @@ func ImportYearFromZipFiles(year int, votacaoZipPath, consultaZipPath, workDir s
 	}
 	defer os.RemoveAll(tmpYearDir)
 
-	votacaoDir := filepath.Join(tmpYearDir, "votacao")
 	consultaDir := filepath.Join(tmpYearDir, "consulta")
-
 	stats := ImportStats{}
-	if err := unzipAndPrune(votacaoZipPath, votacaoDir); err != nil {
-		return nil, err
-	}
-	if err := ensureSystemResources(tmpYearDir, opts); err != nil {
-		return nil, err
-	}
 	if err := unzipAndPrune(consultaZipPath, consultaDir); err != nil {
 		return nil, err
 	}
 
-	votacaoFiles, brFile, err := collectVotacaoFiles(year, votacaoDir)
+	consultaFiles, err := collectConsultaFiles(year, consultaDir)
 	if err != nil {
 		return nil, err
 	}
-	if brFile == "" {
-		stats.MissingBRFile = true
-	}
 
 	winners := map[string]winnerRow{}
-	if brFile != "" {
-		// The office filter applies here too. The _BR file carries the national
-		// offices (Presidente, Vice), which are in allowedCargos anyway, so
-		// enforcing costs nothing today; skipping enforcement would mean that if
-		// TSE ever ships a _BR file for a municipal year, every elected mayor and
-		// councillor in it would enter the politician base unfiltered.
-		if err := processVotacaoFile(brFile, winners, &stats, true); err != nil {
-			return nil, err
-		}
-		stats.FilesProcessed++
-		if err := deleteFile(brFile, &stats); err != nil {
-			return nil, err
-		}
-	}
-
-	for _, f := range votacaoFiles {
-		if err := processVotacaoFile(f, winners, &stats, true); err != nil {
+	for _, f := range consultaFiles {
+		if err := processConsultaFile(f, winners, &stats); err != nil {
 			return nil, err
 		}
 		stats.FilesProcessed++
@@ -246,33 +183,16 @@ func ImportYearFromZipFiles(year int, votacaoZipPath, consultaZipPath, workDir s
 		}
 	}
 
-	consultaFiles, err := collectConsultaFiles(year, consultaDir)
-	if err != nil {
-		return nil, err
-	}
-	cpfs := newCPFIndex()
-	for _, f := range consultaFiles {
-		count, err := processConsultaFile(f, winners, cpfs)
-		if err != nil {
-			return nil, err
-		}
-		stats.CandidateRowsRead += count
-		stats.FilesProcessed++
-		if err := deleteFile(f, &stats); err != nil {
-			return nil, err
-		}
-	}
-
 	stats.WinningCandidates = len(winners)
-	return buildResult(winners, cpfs, stats), nil
+	return buildResult(winners, stats), nil
 }
 
-func buildResult(winners map[string]winnerRow, cpfs *cpfIndex, stats ImportStats) *ImportResult {
+func buildResult(winners map[string]winnerRow, stats ImportStats) *ImportResult {
 	result := &ImportResult{Stats: stats}
 	result.Records = make([]PoliticianRecord, 0, len(winners))
 	for _, winner := range winners {
 		sq := winner.SQ
-		cpf := normalizeNull(cpfs.lookup(winner.UF, sq))
+		cpf := normalizeNull(winner.CPF)
 		if cpf == "" {
 			result.Stats.MissingCPF++
 			continue
@@ -341,30 +261,6 @@ func extractZipFile(f *zip.File, target string) error {
 	return nil
 }
 
-func collectVotacaoFiles(year int, dir string) (ufFiles []string, brFile string, err error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, "", fmt.Errorf("tse: read votacao dir: %w", err)
-	}
-	prefix := fmt.Sprintf("VOTACAO_CANDIDATO_MUNZONA_%d_", year)
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := strings.ToUpper(e.Name())
-		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ".CSV") {
-			continue
-		}
-		full := filepath.Join(dir, e.Name())
-		if strings.HasSuffix(name, "_BR.CSV") {
-			brFile = full
-			continue
-		}
-		ufFiles = append(ufFiles, full)
-	}
-	return ufFiles, brFile, nil
-}
-
 func collectConsultaFiles(year int, dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -385,10 +281,59 @@ func collectConsultaFiles(year int, dir string) ([]string, error) {
 	return files, nil
 }
 
-func processVotacaoFile(path string, winners map[string]winnerRow, stats *ImportStats, enforceCargo bool) error {
+// scanConsultaRow parses one consulta_cand row into a winner, or reports why it
+// was dropped. Returns ok=false for anything that is not an elected official in
+// an office we track.
+func scanConsultaRow(row []string, headers map[string]int, stats *ImportStats) (winnerRow, string, bool) {
+	status := strings.ToUpper(strings.TrimSpace(cell(row, headers, "DS_SIT_TOT_TURNO")))
+	if _, ok := allowedStatus[status]; !ok {
+		stats.SkippedByStatus++
+		return winnerRow{}, "", false
+	}
+	cargo := strings.ToUpper(strings.TrimSpace(cell(row, headers, "DS_CARGO")))
+	if _, ok := allowedCargos[cargo]; !ok {
+		stats.SkippedByCargo++
+		return winnerRow{}, "", false
+	}
+
+	sq := strings.TrimSpace(cell(row, headers, "SQ_CANDIDATO"))
+	turn, err := strconv.Atoi(strings.TrimSpace(cell(row, headers, "NR_TURNO")))
+	if sq == "" || err != nil {
+		stats.SkippedByInvalidRow++
+		return winnerRow{}, "", false
+	}
+
+	w := winnerRow{
+		SQ:           sq,
+		CPF:          strings.TrimSpace(cell(row, headers, "NR_CPF_CANDIDATO")),
+		ElectionYear: strings.TrimSpace(cell(row, headers, "ANO_ELEICAO")),
+		Turn:         turn,
+		UF:           strings.TrimSpace(cell(row, headers, "SG_UF")),
+		Party:        strings.TrimSpace(cell(row, headers, "SG_PARTIDO")),
+		Name:         strings.TrimSpace(cell(row, headers, "NM_CANDIDATO")),
+		UrnaName:     strings.TrimSpace(cell(row, headers, "NM_URNA_CANDIDATO")),
+		SocialName:   strings.TrimSpace(cell(row, headers, "NM_SOCIAL_CANDIDATO")),
+	}
+	return w, candidateKey(w.UF, sq), true
+}
+
+// keepLatestTurn records a winner, preferring the row from the later round (an
+// office decided in a runoff appears in both rounds).
+func keepLatestTurn(winners map[string]winnerRow, key string, w winnerRow) {
+	if existing, ok := winners[key]; !ok || w.Turn > existing.Turn {
+		winners[key] = w
+	}
+}
+
+var consultaHeaders = []string{
+	"SQ_CANDIDATO", "NR_CPF_CANDIDATO", "NR_TURNO", "DS_CARGO", "DS_SIT_TOT_TURNO",
+	"ANO_ELEICAO", "SG_UF", "SG_PARTIDO", "NM_CANDIDATO", "NM_URNA_CANDIDATO", "NM_SOCIAL_CANDIDATO",
+}
+
+func processConsultaFile(path string, winners map[string]winnerRow, stats *ImportStats) error {
 	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("tse: open votacao file %s: %w", path, err)
+		return fmt.Errorf("tse: open consulta file %s: %w", path, err)
 	}
 	defer f.Close()
 
@@ -396,11 +341,7 @@ func processVotacaoFile(path string, winners map[string]winnerRow, stats *Import
 	if err != nil {
 		return err
 	}
-	required := []string{"SQ_CANDIDATO", "NR_TURNO", "DS_SIT_TOT_TURNO", "ANO_ELEICAO", "SG_UF", "SG_PARTIDO", "NM_CANDIDATO", "NM_URNA_CANDIDATO", "NM_SOCIAL_CANDIDATO"}
-	if enforceCargo {
-		required = append(required, "DS_CARGO")
-	}
-	if err := ensureHeaders(headers, required); err != nil {
+	if err := ensureHeaders(headers, consultaHeaders); err != nil {
 		return err
 	}
 
@@ -410,104 +351,26 @@ func processVotacaoFile(path string, winners map[string]winnerRow, stats *Import
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("tse: read votacao row %s: %w", path, err)
+			return fmt.Errorf("tse: read consulta row %s: %w", path, err)
 		}
-		stats.ElectionRowsRead++
-
-		status := strings.ToUpper(strings.TrimSpace(cell(row, headers, "DS_SIT_TOT_TURNO")))
-		if _, ok := allowedStatus[status]; !ok {
-			stats.SkippedByStatus++
-			continue
-		}
-
-		if enforceCargo {
-			cargo := strings.ToUpper(strings.TrimSpace(cell(row, headers, "DS_CARGO")))
-			if _, ok := allowedCargos[cargo]; !ok {
-				stats.SkippedByCargo++
-				continue
-			}
-		}
-
-		sq := strings.TrimSpace(cell(row, headers, "SQ_CANDIDATO"))
-		turnRaw := strings.TrimSpace(cell(row, headers, "NR_TURNO"))
-		if sq == "" || turnRaw == "" {
-			stats.SkippedByInvalidRow++
-			continue
-		}
-		turn, err := strconv.Atoi(turnRaw)
-		if err != nil {
-			stats.SkippedByInvalidRow++
-			continue
-		}
-
-		candidate := winnerRow{
-			SQ:           sq,
-			ElectionYear: strings.TrimSpace(cell(row, headers, "ANO_ELEICAO")),
-			Turn:         turn,
-			UF:           strings.TrimSpace(cell(row, headers, "SG_UF")),
-			Party:        strings.TrimSpace(cell(row, headers, "SG_PARTIDO")),
-			Name:         strings.TrimSpace(cell(row, headers, "NM_CANDIDATO")),
-			UrnaName:     strings.TrimSpace(cell(row, headers, "NM_URNA_CANDIDATO")),
-			SocialName:   strings.TrimSpace(cell(row, headers, "NM_SOCIAL_CANDIDATO")),
-		}
-		key := candidateKey(candidate.UF, sq)
-		if existing, ok := winners[key]; !ok || candidate.Turn > existing.Turn {
-			winners[key] = candidate
+		stats.CandidateRowsRead++
+		if w, key, ok := scanConsultaRow(row, headers, stats); ok {
+			keepLatestTurn(winners, key, w)
 		}
 	}
 	return nil
 }
 
-func processConsultaFile(path string, winners map[string]winnerRow, cpfs *cpfIndex) (int, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return 0, fmt.Errorf("tse: open consulta file %s: %w", path, err)
-	}
-	defer f.Close()
-
-	reader, headers, err := newCSVReaderLatin1(f)
-	if err != nil {
-		return 0, err
-	}
-	if err := ensureHeaders(headers, []string{"SQ_CANDIDATO", "NR_CPF_CANDIDATO"}); err != nil {
-		return 0, err
-	}
-
-	count := 0
-	for {
-		row, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return count, fmt.Errorf("tse: read consulta row %s: %w", path, err)
-		}
-		count++
-		sq := strings.TrimSpace(cell(row, headers, "SQ_CANDIDATO"))
-		if sq == "" {
-			continue
-		}
-		// SG_UF is absent from some layouts; the index degrades to an SQ-only
-		// join for those rows, guarded against ambiguity.
-		uf := strings.TrimSpace(cell(row, headers, "SG_UF"))
-		cpfs.add(uf, sq, strings.TrimSpace(cell(row, headers, "NR_CPF_CANDIDATO")))
-	}
-	return count, nil
-}
-
-func readWinnersFromReader(r io.Reader, enforceCargo bool) (map[string]winnerRow, ImportStats, error) {
+func readWinnersFromReader(r io.Reader) (map[string]winnerRow, ImportStats, error) {
 	stats := ImportStats{}
 	reader, headers, err := newCSVReaderLatin1(r)
 	if err != nil {
 		return nil, stats, err
 	}
-	required := []string{"SQ_CANDIDATO", "NR_TURNO", "DS_SIT_TOT_TURNO", "ANO_ELEICAO", "SG_UF", "SG_PARTIDO", "NM_CANDIDATO", "NM_URNA_CANDIDATO", "NM_SOCIAL_CANDIDATO"}
-	if enforceCargo {
-		required = append(required, "DS_CARGO")
-	}
-	if err := ensureHeaders(headers, required); err != nil {
+	if err := ensureHeaders(headers, consultaHeaders); err != nil {
 		return nil, stats, err
 	}
+
 	winners := map[string]winnerRow{}
 	for {
 		row, err := reader.Read()
@@ -517,71 +380,12 @@ func readWinnersFromReader(r io.Reader, enforceCargo bool) (map[string]winnerRow
 		if err != nil {
 			return nil, stats, err
 		}
-		stats.ElectionRowsRead++
-		status := strings.ToUpper(strings.TrimSpace(cell(row, headers, "DS_SIT_TOT_TURNO")))
-		if _, ok := allowedStatus[status]; !ok {
-			stats.SkippedByStatus++
-			continue
-		}
-		if enforceCargo {
-			cargo := strings.ToUpper(strings.TrimSpace(cell(row, headers, "DS_CARGO")))
-			if _, ok := allowedCargos[cargo]; !ok {
-				stats.SkippedByCargo++
-				continue
-			}
-		}
-		sq := strings.TrimSpace(cell(row, headers, "SQ_CANDIDATO"))
-		turn, err := strconv.Atoi(strings.TrimSpace(cell(row, headers, "NR_TURNO")))
-		if sq == "" || err != nil {
-			stats.SkippedByInvalidRow++
-			continue
-		}
-		candidate := winnerRow{
-			SQ:           sq,
-			ElectionYear: strings.TrimSpace(cell(row, headers, "ANO_ELEICAO")),
-			Turn:         turn,
-			UF:           strings.TrimSpace(cell(row, headers, "SG_UF")),
-			Party:        strings.TrimSpace(cell(row, headers, "SG_PARTIDO")),
-			Name:         strings.TrimSpace(cell(row, headers, "NM_CANDIDATO")),
-			UrnaName:     strings.TrimSpace(cell(row, headers, "NM_URNA_CANDIDATO")),
-			SocialName:   strings.TrimSpace(cell(row, headers, "NM_SOCIAL_CANDIDATO")),
-		}
-		key := candidateKey(candidate.UF, sq)
-		if existing, ok := winners[key]; !ok || candidate.Turn > existing.Turn {
-			winners[key] = candidate
+		stats.CandidateRowsRead++
+		if w, key, ok := scanConsultaRow(row, headers, &stats); ok {
+			keepLatestTurn(winners, key, w)
 		}
 	}
-	stats.WinningCandidates = len(winners)
 	return winners, stats, nil
-}
-
-func readCPFsFromReader(r io.Reader, winners map[string]winnerRow) (*cpfIndex, int, error) {
-	reader, headers, err := newCSVReaderLatin1(r)
-	if err != nil {
-		return nil, 0, err
-	}
-	if err := ensureHeaders(headers, []string{"SQ_CANDIDATO", "NR_CPF_CANDIDATO"}); err != nil {
-		return nil, 0, err
-	}
-	cpfs := newCPFIndex()
-	count := 0
-	for {
-		row, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, count, err
-		}
-		count++
-		sq := strings.TrimSpace(cell(row, headers, "SQ_CANDIDATO"))
-		if sq == "" {
-			continue
-		}
-		uf := strings.TrimSpace(cell(row, headers, "SG_UF"))
-		cpfs.add(uf, sq, strings.TrimSpace(cell(row, headers, "NR_CPF_CANDIDATO")))
-	}
-	return cpfs, count, nil
 }
 
 func newCSVReaderLatin1(r io.Reader) (*csv.Reader, map[string]int, error) {

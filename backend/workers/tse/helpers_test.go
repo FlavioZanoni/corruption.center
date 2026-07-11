@@ -126,38 +126,31 @@ func TestNewCSVReaderLatin1_DecodesLatin1(t *testing.T) {
 }
 
 func TestImportYear_MissingHeaderErrors(t *testing.T) {
-	// Elections CSV missing DS_CARGO (required because enforceCargo is true).
-	elections := "ANO_ELEICAO;NR_TURNO;SQ_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO\r\n"
-	candidates := "SQ_CANDIDATO;NR_CPF_CANDIDATO\r\n"
-	if _, err := ImportYear(strings.NewReader(elections), strings.NewReader(candidates)); err == nil {
+	// consulta_cand CSV missing DS_CARGO.
+	consulta := "ANO_ELEICAO;NR_TURNO;SQ_CANDIDATO;NR_CPF_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO\r\n"
+	if _, err := ImportYear(strings.NewReader(consulta)); err == nil {
 		t.Fatalf("expected missing DS_CARGO header error")
 	}
 }
 
-func TestImportYear_MissingCandidateHeaderErrors(t *testing.T) {
-	elections := "ANO_ELEICAO;NR_TURNO;DS_CARGO;SQ_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO\r\n"
-	candidates := "SQ_CANDIDATO;WRONG\r\n"
-	if _, err := ImportYear(strings.NewReader(elections), strings.NewReader(candidates)); err == nil {
+func TestImportYear_MissingCPFHeaderErrors(t *testing.T) {
+	consulta := "ANO_ELEICAO;NR_TURNO;DS_CARGO;SQ_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO\r\n"
+	if _, err := ImportYear(strings.NewReader(consulta)); err == nil {
 		t.Fatalf("expected missing NR_CPF_CANDIDATO header error")
 	}
 }
 
 func TestImportYear_StatsSkipCountersAndNullCPF(t *testing.T) {
-	elections := strings.Join([]string{
-		"ANO_ELEICAO;NR_TURNO;DS_CARGO;SQ_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO",
-		"2022;1;PRESIDENTE;1;ELEITO;SP;ABC;WINNER ONE;W1;#NE",   // winner, cpf present
-		"2022;1;PRESIDENTE;2;ELEITO;SP;ABC;WINNER TWO;W2;#NE",   // winner, cpf is #NULO -> MissingCPF
-		"2022;1;VEREADOR;3;ELEITO;RJ;DEF;X;X;#NE",               // skipped by cargo (municipal office)
-		"2022;1;PRESIDENTE;4;NAO ELEITO;RJ;DEF;Y;Y;#NE",         // skipped by status
-		"2022;;PRESIDENTE;5;ELEITO;RJ;DEF;Z;Z;#NE",              // invalid turn -> skipped invalid
-	}, "\r\n") + "\r\n"
-	candidates := strings.Join([]string{
-		"SQ_CANDIDATO;NR_CPF_CANDIDATO",
-		"1;12345678900",
-		"2;#NULO",
+	consulta := strings.Join([]string{
+		"ANO_ELEICAO;NR_TURNO;DS_CARGO;SQ_CANDIDATO;NR_CPF_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO",
+		"2022;1;PRESIDENTE;1;12345678900;ELEITO;SP;ABC;WINNER ONE;W1;#NE", // winner, cpf present
+		"2022;1;PRESIDENTE;2;#NULO;ELEITO;SP;ABC;WINNER TWO;W2;#NE",       // winner, cpf is #NULO -> MissingCPF
+		"2022;1;VEREADOR;3;33333333333;ELEITO;RJ;DEF;X;X;#NE",             // skipped by cargo (municipal office)
+		"2022;1;PRESIDENTE;4;44444444444;NAO ELEITO;RJ;DEF;Y;Y;#NE",       // skipped by status
+		"2022;;PRESIDENTE;5;55555555555;ELEITO;RJ;DEF;Z;Z;#NE",            // invalid turn -> skipped invalid
 	}, "\r\n") + "\r\n"
 
-	result, err := ImportYear(strings.NewReader(elections), strings.NewReader(candidates))
+	result, err := ImportYear(strings.NewReader(consulta))
 	if err != nil {
 		t.Fatalf("ImportYear error: %v", err)
 	}
@@ -179,39 +172,6 @@ func TestImportYear_StatsSkipCountersAndNullCPF(t *testing.T) {
 	}
 	if result.Records[0].ElectionYear != 2022 {
 		t.Errorf("ElectionYear = %d, want 2022", result.Records[0].ElectionYear)
-	}
-}
-
-func TestCollectVotacaoFiles(t *testing.T) {
-	dir := t.TempDir()
-	names := []string{
-		"VOTACAO_CANDIDATO_MUNZONA_2022_SP.csv",
-		"VOTACAO_CANDIDATO_MUNZONA_2022_RJ.csv",
-		"VOTACAO_CANDIDATO_MUNZONA_2022_BR.csv",
-		"VOTACAO_CANDIDATO_MUNZONA_2018_SP.csv", // wrong year
-		"UNRELATED.csv",
-		"VOTACAO_CANDIDATO_MUNZONA_2022_SP.txt", // wrong ext
-	}
-	for _, n := range names {
-		if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ufFiles, brFile, err := collectVotacaoFiles(2022, dir)
-	if err != nil {
-		t.Fatalf("collectVotacaoFiles: %v", err)
-	}
-	if len(ufFiles) != 2 {
-		t.Fatalf("expected 2 UF files, got %d: %v", len(ufFiles), ufFiles)
-	}
-	if !strings.HasSuffix(strings.ToUpper(brFile), "_BR.CSV") {
-		t.Fatalf("expected BR file, got %q", brFile)
-	}
-}
-
-func TestCollectVotacaoFiles_MissingDir(t *testing.T) {
-	if _, _, err := collectVotacaoFiles(2022, filepath.Join(t.TempDir(), "nope")); err == nil {
-		t.Fatalf("expected error for missing dir")
 	}
 }
 

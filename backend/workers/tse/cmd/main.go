@@ -36,7 +36,6 @@ func main() {
 		fromYear    = flag.Int("from-year", 0, "Start year (inclusive) for range mode")
 		toYear      = flag.Int("to-year", 0, "End year (inclusive) for range mode")
 		allYears    = flag.Bool("all-years", false, "Run all even years from 2002 to current")
-		votacaoZip  = flag.String("votacao-zip", "", "Path to votacao_candidato_munzona_{year}.zip (single-year mode only)")
 		consultaZip = flag.String("consulta-zip", "", "Path to consulta_cand_{year}.zip (single-year mode only)")
 		zipDir      = flag.String("zip-dir", "", "Directory containing yearly zip files for range/all modes")
 		workDir     = flag.String("workdir", os.TempDir(), "Working directory for extraction and processing")
@@ -118,7 +117,7 @@ func main() {
 			}
 		}
 
-		vPath, cPath, err := resolveZipPaths(y, *zipDir, *votacaoZip, *consultaZip)
+		cPath, err := resolveZipPath(y, *zipDir, *consultaZip)
 		if err != nil {
 			if *persistDB {
 				errMsg := err.Error()
@@ -128,13 +127,13 @@ func main() {
 			fmt.Fprintf(os.Stderr, "resolve year %d zip paths: %v\n", y, err)
 			os.Exit(1)
 		}
-		if vPath == "" || cPath == "" {
+		if cPath == "" {
 			downloadDir := filepath.Join(*workDir, "tse-downloads")
 			if err := os.MkdirAll(downloadDir, 0o755); err != nil {
 				fmt.Fprintf(os.Stderr, "create download dir: %v\n", err)
 				os.Exit(1)
 			}
-			vPath, cPath, err = downloadYearZips(y, downloadDir)
+			cPath, err = downloadConsultaZip(y, downloadDir)
 			if err != nil {
 				if *persistDB {
 					errMsg := err.Error()
@@ -148,7 +147,6 @@ func main() {
 
 		result, err := tse.ImportYearFromZipFiles(
 			y,
-			vPath,
 			cPath,
 			*workDir,
 			tse.ImportOptions{
@@ -164,9 +162,6 @@ func main() {
 			}
 			fmt.Fprintf(os.Stderr, "tse worker failed for year %d: %v\n", y, err)
 			os.Exit(1)
-		}
-		if vPath != "" && strings.Contains(vPath, "tse-downloads") {
-			_ = os.Remove(vPath)
 		}
 		if cPath != "" && strings.Contains(cPath, "tse-downloads") {
 			_ = os.Remove(cPath)
@@ -330,46 +325,35 @@ func resolveYears(year, fromYear, toYear int, allYears bool) ([]int, error) {
 	return years, nil
 }
 
-func resolveZipPaths(year int, zipDir, singleVotacao, singleConsulta string) (string, string, error) {
+func resolveZipPath(year int, zipDir, singleConsulta string) (string, error) {
 	if zipDir == "" {
-		if singleVotacao == "" && singleConsulta == "" {
-			return "", "", nil
-		}
-		if singleVotacao == "" || singleConsulta == "" {
-			return "", "", fmt.Errorf("if one zip path is set, both --votacao-zip and --consulta-zip are required")
-		}
-		return singleVotacao, singleConsulta, nil
+		return singleConsulta, nil
 	}
-	v := filepath.Join(zipDir, fmt.Sprintf("votacao_candidato_munzona_%d.zip", year))
 	c := filepath.Join(zipDir, fmt.Sprintf("consulta_cand_%d.zip", year))
-	if _, err := os.Stat(v); err != nil {
-		return "", "", nil
-	}
 	if _, err := os.Stat(c); err != nil {
-		return "", "", nil
+		return "", nil
 	}
-	return v, c, nil
+	return c, nil
 }
 
-func downloadYearZips(year int, dir string) (string, string, error) {
-	vURL := fmt.Sprintf("https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_candidato_munzona/votacao_candidato_munzona_%d.zip", year)
-	cURL := fmt.Sprintf("https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_%d.zip", year)
-	vPath := filepath.Join(dir, fmt.Sprintf("votacao_candidato_munzona_%d.zip", year))
-	cPath := filepath.Join(dir, fmt.Sprintf("consulta_cand_%d.zip", year))
-
-	if err := downloadFileIfMissing(vURL, vPath); err != nil {
-		return "", "", err
+// Only consulta_cand is fetched. It carries the office, the result, the state,
+// the party, the names and the CPF: everything the import needs. The
+// votacao_candidato_munzona zips add nothing but vote tallies and cost 552MB per
+// year against 4MB here, and unzipping them exhausted the disk outright.
+func downloadConsultaZip(year int, dir string) (string, error) {
+	url := fmt.Sprintf("https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_%d.zip", year)
+	path := filepath.Join(dir, fmt.Sprintf("consulta_cand_%d.zip", year))
+	if err := downloadFileIfMissing(url, path); err != nil {
+		return "", err
 	}
-	if err := downloadFileIfMissing(cURL, cPath); err != nil {
-		return "", "", err
-	}
-	return vPath, cPath, nil
+	return path, nil
 }
 
-// downloadRetries bounds the resume attempts for one file. The TSE CDN routinely
-// resets the connection partway through these multi-hundred-MB zips, so a single
-// GET is not enough: each attempt resumes the partial .tmp with a Range request
-// instead of starting over.
+// downloadRetries bounds the resume attempts for one file. The TSE CDN drops
+// connections mid-transfer, so each attempt resumes the partial .tmp with a Range
+// request rather than starting over. consulta_cand is only ~4MB so this rarely
+// matters now; it did when the import still pulled the multi-hundred-MB votacao
+// zips, where a single reset killed the whole run.
 const downloadRetries = 6
 
 func downloadFileIfMissing(url, dest string) error {

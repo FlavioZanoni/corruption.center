@@ -22,21 +22,23 @@ are elected in other years and are not covered by these files. See
 
 **Logic**
 
-1. Download two zips per year (`votacao_candidato_munzona_{year}.zip`,
-   `consulta_cand_{year}.zip`) from the TSE CDN, unless local zips are supplied.
-   The CDN routinely resets these multi-hundred-MB transfers, so a download is
-   resumed with a `Range` request from the partial `.tmp` file (up to 6 attempts)
-   instead of restarting from byte zero. Zips are unzipped, then pruned and
-   deleted file by file to bound disk use.
-   - `votacao_candidato_munzona_{year}_BR.csv` → Presidente only
-   - `votacao_candidato_munzona_{year}_{UF}.csv` × 27 → the remaining offices
-   - `consulta_cand_{year}_{UF}.csv` × 27 + `_BR` → CPF (not present in votacao files)
-2. Stream all votacao files, filter by `DS_CARGO` and `DS_SIT_TOT_TURNO`,
-   keep highest `NR_TURNO` per `SQ_CANDIDATO`
-3. Join winning `SQ_CANDIDATO` set against `consulta_cand` to get `NR_CPF_CANDIDATO`
+1. Download one zip per year (`consulta_cand_{year}.zip`, about 4MB) from the TSE
+   CDN, unless a local zip is supplied. An interrupted transfer resumes with a
+   `Range` request from the partial `.tmp` file (up to 6 attempts). Inside are 28
+   CSVs: `consulta_cand_{year}_{UF}.csv` × 27 plus `_BR` (Presidente and
+   Vice-Presidente). They are processed and deleted one by one to bound disk use.
+   The `votacao_candidato_munzona` zips are no longer used at all: they only add
+   vote tallies, which this project does not consume, and cost 552MB per year
+   against 4MB here (unzipping them exhausted the disk and broke the 2022 import).
+2. Single pass over the consulta files: filter by `DS_CARGO` and
+   `DS_SIT_TOT_TURNO`, then keep the row with the highest `NR_TURNO` per
+   `(SG_UF, SQ_CANDIDATO)`. The state is part of the key because `SQ_CANDIDATO`
+   is only unique per state in the older files: in 2006 the same SQ belongs to
+   three different elected deputies, and keying on it alone could attach one
+   person's CPF to another
+3. `NR_CPF_CANDIDATO` comes from the same row, so there is no join
 4. Upsert `Politician` by `cpf`: `active: false`, all other fields from TSE data
 5. Cross-year: name variations for same CPF → append to `name_aliases`
-6. Skip `_BR` on even years (no Presidente); must not fail if file is absent
 
 **Auth**
 None; CC-BY license
