@@ -39,10 +39,18 @@ var allowedCargos = map[string]struct{}{
 	"DEPUTADO DISTRITAL": {},
 }
 
+// Elected statuses. The label set is NOT stable across election years: 2002 and
+// 2022 say "ELEITO POR MÉDIA", while 2006 says bare "MÉDIA". Missing a variant
+// silently drops real winners (79 of the 513 federal deputies elected in 2006
+// carry "MÉDIA"), so accept every spelling TSE has used.
 var allowedStatus = map[string]struct{}{
 	"ELEITO":           {},
 	"ELEITO POR QP":    {},
 	"ELEITO POR MÉDIA": {},
+	"ELEITO POR MEDIA": {},
+	"MÉDIA":            {},
+	"MEDIA":            {},
+	"QP":               {},
 }
 
 type ImportResult struct {
@@ -76,6 +84,7 @@ type PoliticianRecord struct {
 }
 
 type winnerRow struct {
+	SQ           string
 	ElectionYear string
 	Turn         int
 	UF           string
@@ -83,6 +92,62 @@ type winnerRow struct {
 	Name         string
 	UrnaName     string
 	SocialName   string
+}
+
+// candidateKey identifies a candidate within one election year.
+//
+// SQ_CANDIDATO alone is NOT unique in the older TSE files: in 2006, SQ 10204 is
+// Cláudio Cajado (BA), Marcos Ramos da Hora (PE) AND Givaldo Carimbão (AL). Keying
+// winners by SQ alone silently overwrites real politicians, and joining the CPF on
+// it can attach one person's document to another, which is the worst failure this
+// project has: a wrong CPF links a sanction or a case to the wrong human. The
+// state disambiguates it (SQ is unique per UF per year).
+func candidateKey(uf, sq string) string {
+	return strings.ToUpper(strings.TrimSpace(uf)) + "|" + strings.TrimSpace(sq)
+}
+
+// cpfIndex resolves a candidate's CPF, preferring the collision-proof (UF, SQ)
+// key and falling back to SQ alone only when that SQ is unambiguous across the
+// whole file set. The fallback exists for PRESIDENTE: the consulta row lives in
+// the national file (SG_UF "BR") while the votação rows are per state, so the two
+// sides disagree on UF and only the SQ can join them.
+type cpfIndex struct {
+	byKey     map[string]string
+	bySQ      map[string]string
+	ambiguous map[string]bool
+}
+
+func newCPFIndex() *cpfIndex {
+	return &cpfIndex{
+		byKey:     map[string]string{},
+		bySQ:      map[string]string{},
+		ambiguous: map[string]bool{},
+	}
+}
+
+func (c *cpfIndex) add(uf, sq, cpf string) {
+	sq = strings.TrimSpace(sq)
+	if sq == "" {
+		return
+	}
+	c.byKey[candidateKey(uf, sq)] = cpf
+	if prev, seen := c.bySQ[sq]; seen && prev != cpf {
+		// The same SQ carries different CPFs: joining on SQ alone would pick a
+		// person at random, so refuse to use it as a fallback.
+		c.ambiguous[sq] = true
+		return
+	}
+	c.bySQ[sq] = cpf
+}
+
+func (c *cpfIndex) lookup(uf, sq string) string {
+	if cpf, ok := c.byKey[candidateKey(uf, sq)]; ok {
+		return cpf
+	}
+	if c.ambiguous[sq] {
+		return ""
+	}
+	return c.bySQ[sq]
 }
 
 type ImportOptions struct {
@@ -95,12 +160,12 @@ func ImportYear(electionsCSV io.Reader, candidatesCSV io.Reader) (*ImportResult,
 	if err != nil {
 		return nil, err
 	}
-	cpfBySQ, candidateRows, err := readCPFsFromReader(candidatesCSV, winners)
+	cpfs, candidateRows, err := readCPFsFromReader(candidatesCSV, winners)
 	if err != nil {
 		return nil, err
 	}
 	stats.CandidateRowsRead = candidateRows
-	return buildResult(winners, cpfBySQ, stats), nil
+	return buildResult(winners, cpfs, stats), nil
 }
 
 func ImportYearFromZipFiles(year int, votacaoZipPath, consultaZipPath, workDir string, opts ImportOptions) (*ImportResult, error) {
@@ -185,9 +250,9 @@ func ImportYearFromZipFiles(year int, votacaoZipPath, consultaZipPath, workDir s
 	if err != nil {
 		return nil, err
 	}
-	cpfBySQ := map[string]string{}
+	cpfs := newCPFIndex()
 	for _, f := range consultaFiles {
-		count, err := processConsultaFile(f, winners, cpfBySQ)
+		count, err := processConsultaFile(f, winners, cpfs)
 		if err != nil {
 			return nil, err
 		}
@@ -199,14 +264,15 @@ func ImportYearFromZipFiles(year int, votacaoZipPath, consultaZipPath, workDir s
 	}
 
 	stats.WinningCandidates = len(winners)
-	return buildResult(winners, cpfBySQ, stats), nil
+	return buildResult(winners, cpfs, stats), nil
 }
 
-func buildResult(winners map[string]winnerRow, cpfBySQ map[string]string, stats ImportStats) *ImportResult {
+func buildResult(winners map[string]winnerRow, cpfs *cpfIndex, stats ImportStats) *ImportResult {
 	result := &ImportResult{Stats: stats}
 	result.Records = make([]PoliticianRecord, 0, len(winners))
-	for sq, winner := range winners {
-		cpf := normalizeNull(cpfBySQ[sq])
+	for _, winner := range winners {
+		sq := winner.SQ
+		cpf := normalizeNull(cpfs.lookup(winner.UF, sq))
 		if cpf == "" {
 			result.Stats.MissingCPF++
 			continue
@@ -375,6 +441,7 @@ func processVotacaoFile(path string, winners map[string]winnerRow, stats *Import
 		}
 
 		candidate := winnerRow{
+			SQ:           sq,
 			ElectionYear: strings.TrimSpace(cell(row, headers, "ANO_ELEICAO")),
 			Turn:         turn,
 			UF:           strings.TrimSpace(cell(row, headers, "SG_UF")),
@@ -383,14 +450,15 @@ func processVotacaoFile(path string, winners map[string]winnerRow, stats *Import
 			UrnaName:     strings.TrimSpace(cell(row, headers, "NM_URNA_CANDIDATO")),
 			SocialName:   strings.TrimSpace(cell(row, headers, "NM_SOCIAL_CANDIDATO")),
 		}
-		if existing, ok := winners[sq]; !ok || candidate.Turn > existing.Turn {
-			winners[sq] = candidate
+		key := candidateKey(candidate.UF, sq)
+		if existing, ok := winners[key]; !ok || candidate.Turn > existing.Turn {
+			winners[key] = candidate
 		}
 	}
 	return nil
 }
 
-func processConsultaFile(path string, winners map[string]winnerRow, cpfBySQ map[string]string) (int, error) {
+func processConsultaFile(path string, winners map[string]winnerRow, cpfs *cpfIndex) (int, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, fmt.Errorf("tse: open consulta file %s: %w", path, err)
@@ -416,10 +484,13 @@ func processConsultaFile(path string, winners map[string]winnerRow, cpfBySQ map[
 		}
 		count++
 		sq := strings.TrimSpace(cell(row, headers, "SQ_CANDIDATO"))
-		if _, ok := winners[sq]; !ok {
+		if sq == "" {
 			continue
 		}
-		cpfBySQ[sq] = strings.TrimSpace(cell(row, headers, "NR_CPF_CANDIDATO"))
+		// SG_UF is absent from some layouts; the index degrades to an SQ-only
+		// join for those rows, guarded against ambiguity.
+		uf := strings.TrimSpace(cell(row, headers, "SG_UF"))
+		cpfs.add(uf, sq, strings.TrimSpace(cell(row, headers, "NR_CPF_CANDIDATO")))
 	}
 	return count, nil
 }
@@ -466,6 +537,7 @@ func readWinnersFromReader(r io.Reader, enforceCargo bool) (map[string]winnerRow
 			continue
 		}
 		candidate := winnerRow{
+			SQ:           sq,
 			ElectionYear: strings.TrimSpace(cell(row, headers, "ANO_ELEICAO")),
 			Turn:         turn,
 			UF:           strings.TrimSpace(cell(row, headers, "SG_UF")),
@@ -474,15 +546,16 @@ func readWinnersFromReader(r io.Reader, enforceCargo bool) (map[string]winnerRow
 			UrnaName:     strings.TrimSpace(cell(row, headers, "NM_URNA_CANDIDATO")),
 			SocialName:   strings.TrimSpace(cell(row, headers, "NM_SOCIAL_CANDIDATO")),
 		}
-		if existing, ok := winners[sq]; !ok || candidate.Turn > existing.Turn {
-			winners[sq] = candidate
+		key := candidateKey(candidate.UF, sq)
+		if existing, ok := winners[key]; !ok || candidate.Turn > existing.Turn {
+			winners[key] = candidate
 		}
 	}
 	stats.WinningCandidates = len(winners)
 	return winners, stats, nil
 }
 
-func readCPFsFromReader(r io.Reader, winners map[string]winnerRow) (map[string]string, int, error) {
+func readCPFsFromReader(r io.Reader, winners map[string]winnerRow) (*cpfIndex, int, error) {
 	reader, headers, err := newCSVReaderLatin1(r)
 	if err != nil {
 		return nil, 0, err
@@ -490,7 +563,7 @@ func readCPFsFromReader(r io.Reader, winners map[string]winnerRow) (map[string]s
 	if err := ensureHeaders(headers, []string{"SQ_CANDIDATO", "NR_CPF_CANDIDATO"}); err != nil {
 		return nil, 0, err
 	}
-	cpfBySQ := make(map[string]string, len(winners))
+	cpfs := newCPFIndex()
 	count := 0
 	for {
 		row, err := reader.Read()
@@ -502,11 +575,13 @@ func readCPFsFromReader(r io.Reader, winners map[string]winnerRow) (map[string]s
 		}
 		count++
 		sq := strings.TrimSpace(cell(row, headers, "SQ_CANDIDATO"))
-		if _, ok := winners[sq]; ok {
-			cpfBySQ[sq] = strings.TrimSpace(cell(row, headers, "NR_CPF_CANDIDATO"))
+		if sq == "" {
+			continue
 		}
+		uf := strings.TrimSpace(cell(row, headers, "SG_UF"))
+		cpfs.add(uf, sq, strings.TrimSpace(cell(row, headers, "NR_CPF_CANDIDATO")))
 	}
-	return cpfBySQ, count, nil
+	return cpfs, count, nil
 }
 
 func newCSVReaderLatin1(r io.Reader) (*csv.Reader, map[string]int, error) {

@@ -2,11 +2,27 @@ package tse
 
 import (
 	"archive/zip"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
 )
+
+// latin1 encodes a fixture the way TSE actually ships its CSVs (ISO-8859-1), so
+// accented values like "MÉDIA" survive the importer's Latin-1 decoding. A UTF-8
+// fixture would arrive mangled and silently fail to match.
+func latin1(t *testing.T, s string) io.Reader {
+	t.Helper()
+	encoded, _, err := transform.String(charmap.ISO8859_1.NewEncoder(), s)
+	if err != nil {
+		t.Fatalf("encode fixture as latin-1: %v", err)
+	}
+	return strings.NewReader(encoded)
+}
 
 func TestImportYear_FiltersTurnAliasesAndActiveFalse(t *testing.T) {
 	elections := strings.Join([]string{
@@ -164,4 +180,65 @@ func createZip(path string, files map[string]string) error {
 		}
 	}
 	return w.Close()
+}
+
+// SQ_CANDIDATO is only unique per state in the older TSE files: in 2006, SQ 10204
+// is a different elected deputy in BA, in PE and in AL. Keying on SQ alone drops
+// two of the three, and joins the CPF of whichever row won the race, which would
+// attach one politician's document to another and link their sanctions and cases
+// to the wrong human.
+func TestImportYear_SameSQInDifferentStatesAreDifferentPeople(t *testing.T) {
+	elections := strings.Join([]string{
+		"ANO_ELEICAO;NR_TURNO;DS_CARGO;SQ_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO",
+		"2006;1;DEPUTADO FEDERAL;10204;ELEITO;BA;P1;CLAUDIO CAJADO;CAJADO;#NE",
+		"2006;1;DEPUTADO FEDERAL;10204;MÉDIA;AL;P2;GIVALDO CARIMBAO;CARIMBAO;#NE",
+	}, "\r\n") + "\r\n"
+
+	candidates := strings.Join([]string{
+		"ANO_ELEICAO;SQ_CANDIDATO;SG_UF;NR_CPF_CANDIDATO",
+		"2006;10204;BA;11111111111",
+		"2006;10204;AL;22222222222",
+	}, "\r\n") + "\r\n"
+
+	result, err := ImportYear(latin1(t, elections), latin1(t, candidates))
+	if err != nil {
+		t.Fatalf("ImportYear returned error: %v", err)
+	}
+	if len(result.Records) != 2 {
+		t.Fatalf("expected both deputies, got %d record(s): %+v", len(result.Records), result.Records)
+	}
+
+	cpfByName := map[string]string{}
+	for _, r := range result.Records {
+		cpfByName[r.Name] = r.CPF
+	}
+	if got := cpfByName["CLAUDIO CAJADO"]; got != "11111111111" {
+		t.Fatalf("CLAUDIO CAJADO got CPF %q, want 11111111111 (a cross-state SQ collision handed him the wrong document)", got)
+	}
+	if got := cpfByName["GIVALDO CARIMBAO"]; got != "22222222222" {
+		t.Fatalf("GIVALDO CARIMBAO got CPF %q, want 22222222222", got)
+	}
+}
+
+// "MÉDIA" is how 2006 spells what later years call "ELEITO POR MÉDIA". Dropping
+// it loses 79 of the 513 federal deputies elected that year.
+func TestImportYear_AcceptsLegacyElectedLabels(t *testing.T) {
+	elections := strings.Join([]string{
+		"ANO_ELEICAO;NR_TURNO;DS_CARGO;SQ_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO",
+		"2006;1;DEPUTADO FEDERAL;1;MÉDIA;SP;P1;ELEITO POR MEDIA;X;#NE",
+		"2006;1;DEPUTADO FEDERAL;2;SUPLENTE;SP;P1;NAO ELEITO;Y;#NE",
+	}, "\r\n") + "\r\n"
+	candidates := strings.Join([]string{
+		"ANO_ELEICAO;SQ_CANDIDATO;SG_UF;NR_CPF_CANDIDATO",
+		"2006;1;SP;33333333333",
+		"2006;2;SP;44444444444",
+	}, "\r\n") + "\r\n"
+
+	result, err := ImportYear(latin1(t, elections), latin1(t, candidates))
+	if err != nil {
+		t.Fatalf("ImportYear returned error: %v", err)
+	}
+	if len(result.Records) != 1 || result.Records[0].CPF != "33333333333" {
+		t.Fatalf("expected the MÉDIA winner only, got %+v", result.Records)
+	}
 }

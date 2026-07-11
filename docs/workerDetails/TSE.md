@@ -18,7 +18,16 @@ the office filter is deliberately wide (below).
 
 ## Files
 
-Two types of files per election year, both needed. Join on `SQ_CANDIDATO`.
+Two types of files per election year, both needed. Join on `(SG_UF, SQ_CANDIDATO)`.
+
+> **`SQ_CANDIDATO` is not unique on its own.** In the older files it is only unique
+> per state: in 2006, SQ `10204` is Cláudio Cajado (BA), Marcos Ramos da Hora (PE)
+> and Givaldo Carimbão (AL), three different elected deputies. Joining on SQ alone
+> both drops real politicians and, far worse, attaches one person's CPF to another,
+> which would link their sanctions and court cases to the wrong human. The join is
+> keyed on `(UF, SQ)`, with an SQ-only fallback used only when that SQ is
+> unambiguous (needed for Presidente: its consulta row sits in the national file
+> with `SG_UF = BR` while the votacao rows are per state).
 
 ### 1. `votacao_candidato_munzona_{year}_BR.csv`
 
@@ -140,14 +149,26 @@ Municipal offices (`PREFEITO`, `VICE-PREFEITO`, `VEREADOR`) are **not** covered:
 elected in the other even-year cycle (2004, 2008, 2012, …) and do not appear in the
 general-election files at all.
 
-The cargo filter is enforced on the per-UF files only. The `_BR` file is not filtered by
-cargo because it carries Presidente rows exclusively.
+The cargo filter is enforced on every file, including `_BR`. `_BR` carries Presidente
+rows exclusively today, so filtering it costs nothing; not filtering it would mean that
+if TSE ever ships a `_BR` file for a municipal year, every elected mayor and councillor
+in it would enter the politician base unfiltered.
 
 **`DS_SIT_TOT_TURNO`: keep only:**
 
 - `ELEITO`
 - `ELEITO POR QP` (proportional seat by party quota)
 - `ELEITO POR MÉDIA` (proportional seat by average)
+- `MÉDIA` / `MEDIA` / `QP` / `ELEITO POR MEDIA` (legacy spellings)
+
+> **The label set is not stable across years.** 2002 and 2022 say `ELEITO POR MÉDIA`;
+> 2006 says bare `MÉDIA`. Accepting only the modern spellings dropped 79 of the 513
+> federal deputies elected in 2006 (`434 ELEITO + 79 MÉDIA = 513`, the exact size of
+> the Câmara). Any new variant TSE invents must be added here, or those winners
+> vanish silently.
+
+Note that the files are ISO-8859-1 encoded, so accented labels only match after the
+Latin-1 decode. A UTF-8 test fixture will silently fail to match `MÉDIA`.
 
 ---
 
