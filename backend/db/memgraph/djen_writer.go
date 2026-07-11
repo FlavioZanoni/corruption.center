@@ -190,3 +190,59 @@ func djenOrganizationID(name string) string {
 	clean = strings.Join(strings.Fields(clean), "_")
 	return "org_djen_" + clean
 }
+
+// CitedPerson is an anonymous Person already linked as a defendant. Rematch mode
+// re-tests these names against the politician index.
+type CitedPerson struct {
+	PersonID     string
+	Name         string
+	ProceedingID string
+	CaseNumber   string
+	ScandalID    string
+}
+
+// ListCitedPersons returns every Person with a DEFENDANT_IN edge. A party is
+// matched against the politician index only once, at discovery, and is then
+// snapshotted so it never reappears in a roster delta — so when the politician
+// base grows (a TSE import), previously unmatched defendants stay anonymous
+// forever. This lets a rematch pass re-test them.
+func (db *DB) ListCitedPersons(ctx context.Context) ([]CitedPerson, error) {
+	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	res, err := session.Run(ctx, `
+MATCH (p:Person)-[:DEFENDANT_IN]->(lp:LegalProceeding)
+OPTIONAL MATCH (lp)-[:INVESTIGATES]->(s:Scandal)
+RETURN p.id AS person_id, p.name AS name, lp.id AS proceeding_id,
+       lp.case_number AS case_number, s.id AS scandal_id
+`, nil)
+	if err != nil {
+		return nil, fmt.Errorf("memgraph: list cited persons: %w", err)
+	}
+
+	out := make([]CitedPerson, 0)
+	for res.Next(ctx) {
+		rec := res.Record()
+		cp := CitedPerson{
+			PersonID:     recString(rec, "person_id"),
+			Name:         recString(rec, "name"),
+			ProceedingID: recString(rec, "proceeding_id"),
+			CaseNumber:   recString(rec, "case_number"),
+			ScandalID:    recString(rec, "scandal_id"),
+		}
+		if cp.PersonID == "" || cp.Name == "" || cp.ProceedingID == "" {
+			continue
+		}
+		out = append(out, cp)
+	}
+	if err := res.Err(); err != nil {
+		return nil, fmt.Errorf("memgraph: list cited persons rows: %w", err)
+	}
+	return out, nil
+}
+
+func recString(rec *neo4j.Record, key string) string {
+	v, _ := rec.Get(key)
+	s, _ := v.(string)
+	return strings.TrimSpace(s)
+}

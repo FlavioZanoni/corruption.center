@@ -366,39 +366,93 @@ func downloadYearZips(year int, dir string) (string, string, error) {
 	return vPath, cPath, nil
 }
 
+// downloadRetries bounds the resume attempts for one file. The TSE CDN routinely
+// resets the connection partway through these multi-hundred-MB zips, so a single
+// GET is not enough: each attempt resumes the partial .tmp with a Range request
+// instead of starting over.
+const downloadRetries = 6
+
 func downloadFileIfMissing(url, dest string) error {
 	if st, err := os.Stat(dest); err == nil && st.Size() > 0 {
 		fmt.Fprintf(os.Stderr, "[tse] using cached %s\n", dest)
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "[tse] downloading %s\n", url)
-	client := &http.Client{Timeout: 30 * time.Minute}
-	resp, err := client.Get(url)
-	if err != nil {
-		return fmt.Errorf("download %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download %s: status %d", url, resp.StatusCode)
-	}
 
 	tmp := dest + ".tmp"
-	out, err := os.Create(tmp)
+	var lastErr error
+	for attempt := 1; attempt <= downloadRetries; attempt++ {
+		done, err := resumeDownload(url, tmp)
+		if done {
+			if err := os.Rename(tmp, dest); err != nil {
+				_ = os.Remove(tmp)
+				return fmt.Errorf("rename %s -> %s: %w", tmp, dest, err)
+			}
+			return nil
+		}
+		lastErr = err
+		var have int64
+		if st, serr := os.Stat(tmp); serr == nil {
+			have = st.Size()
+		}
+		fmt.Fprintf(os.Stderr, "[tse] download interrupted at %d bytes (attempt %d/%d): %v\n",
+			have, attempt, downloadRetries, err)
+		time.Sleep(time.Duration(attempt) * 2 * time.Second)
+	}
+	_ = os.Remove(tmp)
+	return fmt.Errorf("download %s: giving up after %d attempts: %w", url, downloadRetries, lastErr)
+}
+
+// resumeDownload appends to tmp from wherever it left off. It reports done=true
+// when the body was fully copied; on a mid-transfer failure it leaves tmp in
+// place so the next attempt can resume from it.
+func resumeDownload(url, tmp string) (bool, error) {
+	var have int64
+	if st, err := os.Stat(tmp); err == nil {
+		have = st.Size()
+	}
+
+	client := &http.Client{Timeout: 30 * time.Minute}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return fmt.Errorf("create %s: %w", tmp, err)
+		return false, fmt.Errorf("build request: %w", err)
+	}
+	if have > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", have))
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusPartialContent:
+		// Server honoured the Range — append.
+	case http.StatusOK:
+		// No range support (or a fresh start): rewrite from byte zero.
+		have = 0
+	default:
+		return false, fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	flags := os.O_CREATE | os.O_WRONLY
+	if have > 0 {
+		flags |= os.O_APPEND
+	} else {
+		flags |= os.O_TRUNC
+	}
+	out, err := os.OpenFile(tmp, flags, 0o644)
+	if err != nil {
+		return false, fmt.Errorf("open %s: %w", tmp, err)
 	}
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		out.Close()
-		_ = os.Remove(tmp)
-		return fmt.Errorf("write %s: %w", tmp, err)
+		return false, fmt.Errorf("write %s: %w", tmp, err)
 	}
 	if err := out.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("close %s: %w", tmp, err)
+		return false, fmt.Errorf("close %s: %w", tmp, err)
 	}
-	if err := os.Rename(tmp, dest); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("rename %s -> %s: %w", tmp, dest, err)
-	}
-	return nil
+	return true, nil
 }

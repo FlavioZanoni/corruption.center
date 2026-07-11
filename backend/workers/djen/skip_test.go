@@ -15,6 +15,7 @@ type fakeStore struct {
 	purged        bool
 	tracked       bool
 	hasCandidate  bool
+	hasPartyMatch bool
 	reviews       int
 	trackedArgs   []string
 	candidateArgs []string
@@ -41,6 +42,9 @@ func (f *fakeStore) IsCaseTracked(_ context.Context, caseNumber string) (bool, e
 func (f *fakeStore) HasDjenCaseCandidate(_ context.Context, caseNumber string) (bool, error) {
 	f.candidateArgs = append(f.candidateArgs, caseNumber)
 	return f.hasCandidate, nil
+}
+func (f *fakeStore) HasPartyMatchReview(_ context.Context, _, _ string) (bool, error) {
+	return f.hasPartyMatch, nil
 }
 func (f *fakeStore) IsSubjectPurged(context.Context, ...string) (bool, error) {
 	return f.purged, nil

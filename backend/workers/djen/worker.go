@@ -29,6 +29,7 @@ type djenStore interface {
 	CreatePendingReview(ctx context.Context, reviewType string, payload []byte, worker string) error
 	IsCaseTracked(ctx context.Context, caseNumber string) (bool, error)
 	HasDjenCaseCandidate(ctx context.Context, caseNumber string) (bool, error)
+	HasPartyMatchReview(ctx context.Context, politicianID, proceedingID string) (bool, error)
 	IsSubjectPurged(ctx context.Context, keys ...string) (bool, error)
 }
 
@@ -40,11 +41,12 @@ type Worker struct {
 }
 
 type Options struct {
-	BaseURL  string
-	CaseMode bool
-	NameMode bool
-	DryRun   bool
-	NameCap  int // items per name per run; 0 → defaultNameCap
+	BaseURL     string
+	CaseMode    bool
+	NameMode    bool
+	RematchMode bool
+	DryRun      bool
+	NameCap     int // items per name per run; 0 → defaultNameCap
 	// PollLimit bounds how many watcher cases are polled in case mode (0 = all).
 	PollLimit int
 }
@@ -70,6 +72,13 @@ type RunStats struct {
 	SkippedTombstoned int `json:"skipped_tombstoned"`
 	// shared
 	PendingReviews int `json:"pending_reviews"`
+	// PersonsRematched counts existing Person defendants re-tested against the
+	// politician index (rematch mode).
+	PersonsRematched int `json:"persons_rematched"`
+	// FetchErrors counts DJEN lookups abandoned after the client exhausted its
+	// retries. DJEN returns sporadic 500s, and a run scans hundreds of names —
+	// one bad lookup skips its item instead of discarding the whole run.
+	FetchErrors int `json:"fetch_errors"`
 }
 
 func NewWorker(pg *psql.DB, mg *memgraph.DB, opts Options) *Worker {
@@ -101,7 +110,66 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 			return nil, err
 		}
 	}
+	if opts.RematchMode {
+		if err := w.runRematchMode(ctx, opts, index, stats); err != nil {
+			return nil, err
+		}
+	}
 	return stats, nil
+}
+
+// ─── Rematch mode ─────────────────────────────────────────────────────────────
+
+// runRematchMode re-tests Person defendants we already discovered against the
+// current politician index. A party is matched only once, at discovery, and then
+// snapshotted out of future roster deltas — so defendants found while the
+// politician base was small (or before a TSE import added the state-level
+// offices) would stay anonymous forever. This is the only path by which a
+// pre-2023 case, whose party list can never be re-fetched, gains a politician.
+//
+// Like discovery, a match never auto-creates the edge: it files a djen_party_match
+// review carrying the Person node so the operator sees exactly what is being
+// promoted.
+func (w *Worker) runRematchMode(ctx context.Context, opts Options, index map[string]string, stats *RunStats) error {
+	persons, err := w.mg.ListCitedPersons(ctx)
+	if err != nil {
+		return err
+	}
+	stats.PersonsRematched = len(persons)
+
+	for _, p := range persons {
+		polID, ok := matchPolitician(p.Name, index)
+		if !ok {
+			continue
+		}
+		exists, err := w.pg.HasPartyMatchReview(ctx, polID, p.ProceedingID)
+		if err != nil {
+			return err
+		}
+		if exists {
+			stats.SkippedExisting++
+			continue
+		}
+		stats.PoliticianHits++
+		if opts.DryRun {
+			continue
+		}
+		payload, _ := json.Marshal(map[string]any{
+			"case_number":   p.CaseNumber,
+			"scandal_id":    p.ScandalID,
+			"proceeding_id": p.ProceedingID,
+			"politician_id": polID,
+			"person_id":     p.PersonID,
+			"name":          p.Name,
+			"polo":          "P",
+			"origin":        "rematch",
+		})
+		if err := w.pg.CreatePendingReview(ctx, "djen_party_match", payload, workerName); err != nil {
+			return err
+		}
+		stats.PendingReviews++
+	}
+	return nil
 }
 
 // ─── Case mode ────────────────────────────────────────────────────────────────
@@ -133,7 +201,12 @@ func (w *Worker) runCaseMode(ctx context.Context, opts Options, index map[string
 
 		items, err := w.client.SearchByCaseNumber(ctx, caseNumber)
 		if err != nil {
-			return err
+			if ctx.Err() != nil {
+				return err
+			}
+			stats.FetchErrors++
+			w.log.Warn("djen: case lookup failed, skipping", "case", caseNumber, "err", err)
+			continue
 		}
 		stats.CasesPolled++
 
@@ -298,7 +371,12 @@ func (w *Worker) runNameMode(ctx context.Context, opts Options, pols []memgraph.
 			stats.NamesSearched++
 			items, err := w.client.SearchByPartyName(ctx, name, cap)
 			if err != nil {
-				return err
+				if ctx.Err() != nil {
+					return err
+				}
+				stats.FetchErrors++
+				w.log.Warn("djen: name lookup failed, skipping", "name", name, "err", err)
+				continue
 			}
 
 			for caseNumber, group := range groupByProcesso(items) {

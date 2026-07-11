@@ -145,3 +145,23 @@ func (db *DB) HasDjenCaseCandidate(ctx context.Context, caseNumber string) (bool
 	}
 	return exists, nil
 }
+
+// HasPartyMatchReview reports whether this politician was already flagged
+// against this proceeding, so a rematch pass re-run does not re-file the same
+// review. Both pending and resolved (approved/rejected) reviews count: a human
+// rejection must not be undone by the next run.
+func (db *DB) HasPartyMatchReview(ctx context.Context, politicianID, proceedingID string) (bool, error) {
+	var exists bool
+	err := db.conn.QueryRow(ctx, `
+    SELECT EXISTS (
+      SELECT 1 FROM pending_review
+      WHERE type = 'djen_party_match'
+        AND payload->>'politician_id' = $1
+        AND payload->>'proceeding_id' = $2
+    )
+  `, politicianID, proceedingID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("psql: has party match review: %w", err)
+	}
+	return exists, nil
+}

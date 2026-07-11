@@ -19,6 +19,7 @@ func main() {
 		baseURL   = flag.String("base-url", "", "DJEN API base URL override")
 		caseMode  = flag.Bool("case-mode", true, "Run case mode (party roster discovery for tracked cases)")
 		nameMode  = flag.Bool("name-mode", true, "Run name mode (case discovery for tracked politicians)")
+		rematch   = flag.Bool("rematch-mode", false, "Re-test existing Person defendants against the current politician index (run after a TSE import)")
 		dryRun    = flag.Bool("dry-run", false, "Fetch and compute but perform no writes")
 		nameCap   = flag.Int("name-cap", 300, "Max items pulled per politician name per run")
 		pollLimit = flag.Int("poll-limit", 0, "Max watcher cases to poll in case mode (0 = all)")
@@ -48,12 +49,13 @@ func main() {
 	defer mg.Close(ctx)
 
 	opts := djen.Options{
-		BaseURL:   *baseURL,
-		CaseMode:  *caseMode,
-		NameMode:  *nameMode,
-		DryRun:    *dryRun,
-		NameCap:   *nameCap,
-		PollLimit: *pollLimit,
+		BaseURL:     *baseURL,
+		CaseMode:    *caseMode,
+		NameMode:    *nameMode,
+		RematchMode: *rematch,
+		DryRun:      *dryRun,
+		NameCap:     *nameCap,
+		PollLimit:   *pollLimit,
 	}
 
 	w := djen.NewWorker(pg, mg, opts)

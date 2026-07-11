@@ -1,1 +1,4 @@
 .env
+
+# TSE bulk zips + extraction workdir
+.tse-work/

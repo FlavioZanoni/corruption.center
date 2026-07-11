@@ -22,11 +22,21 @@ const (
 	defaultMinMemBytes  = 256 * 1024 * 1024
 )
 
+// Offices kept from a general election. State-level executives and legislators
+// are included because they are heavily represented in corruption prosecutions
+// (state governors especially) and a name that is not in this base can never be
+// matched to a court party or a sanction — it stays an anonymous Person.
+// Municipal offices (prefeito, vereador) are elected in different years and are
+// not covered by these files.
 var allowedCargos = map[string]struct{}{
-	"DEPUTADO FEDERAL": {},
-	"SENADOR":          {},
-	"PRESIDENTE":       {},
-	"VICE-PRESIDENTE":  {},
+	"DEPUTADO FEDERAL":   {},
+	"SENADOR":            {},
+	"PRESIDENTE":         {},
+	"VICE-PRESIDENTE":    {},
+	"GOVERNADOR":         {},
+	"VICE-GOVERNADOR":    {},
+	"DEPUTADO ESTADUAL":  {},
+	"DEPUTADO DISTRITAL": {},
 }
 
 var allowedStatus = map[string]struct{}{

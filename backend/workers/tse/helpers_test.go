@@ -147,7 +147,7 @@ func TestImportYear_StatsSkipCountersAndNullCPF(t *testing.T) {
 		"ANO_ELEICAO;NR_TURNO;DS_CARGO;SQ_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO",
 		"2022;1;PRESIDENTE;1;ELEITO;SP;ABC;WINNER ONE;W1;#NE",   // winner, cpf present
 		"2022;1;PRESIDENTE;2;ELEITO;SP;ABC;WINNER TWO;W2;#NE",   // winner, cpf is #NULO -> MissingCPF
-		"2022;1;DEPUTADO ESTADUAL;3;ELEITO;RJ;DEF;X;X;#NE",      // skipped by cargo
+		"2022;1;VEREADOR;3;ELEITO;RJ;DEF;X;X;#NE",               // skipped by cargo (municipal office)
 		"2022;1;PRESIDENTE;4;NAO ELEITO;RJ;DEF;Y;Y;#NE",         // skipped by status
 		"2022;;PRESIDENTE;5;ELEITO;RJ;DEF;Z;Z;#NE",              // invalid turn -> skipped invalid
 	}, "\r\n") + "\r\n"
