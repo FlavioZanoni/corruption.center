@@ -14,6 +14,7 @@ import (
 
 	"corruption-center/db/memgraph"
 	"corruption-center/db/psql"
+	"corruption-center/matching"
 )
 
 const workerName = "sanctions_sync"
@@ -60,14 +61,17 @@ type Options struct {
 
 // Stats summarizes a run.
 type Stats struct {
-	RecordsProcessed  int            `json:"records_processed"`
-	SanctionsUpserted int            `json:"sanctions_upserted"`
-	OrgsCreated       int            `json:"orgs_created"`
-	PersonsCreated    int            `json:"persons_created"`
-	EdgesCreated      int            `json:"edges_created"`
-	PendingReviews    int            `json:"pending_reviews"`
-	MaskedCPFMatches  int            `json:"masked_cpf_matches"`
-	NameOnly          int            `json:"name_only"`
+	RecordsProcessed  int `json:"records_processed"`
+	SanctionsUpserted int `json:"sanctions_upserted"`
+	OrgsCreated       int `json:"orgs_created"`
+	PersonsCreated    int `json:"persons_created"`
+	EdgesCreated      int `json:"edges_created"`
+	PendingReviews    int `json:"pending_reviews"`
+	MaskedCPFMatches  int `json:"masked_cpf_matches"`
+	// AutoLinked counts edges written with no human review because the evidence
+	// reached document grade (matching.AutoLinkThreshold).
+	AutoLinked int `json:"auto_linked"`
+	NameOnly   int `json:"name_only"`
 	// SkippedTombstoned counts records whose subject was LGPD-purged: the node
 	// is NOT re-created (resurrection guard, see purge_tombstone / migration 008).
 	SkippedTombstoned int `json:"skipped_tombstoned"`
@@ -266,7 +270,8 @@ func (w *Worker) linkCNPJ(ctx context.Context, rec SanctionRecord, sanctionID st
 	if created {
 		stats.OrgsCreated++
 	}
-	if err := w.mg.EnsureSanctionedInEdge(ctx, "Organization", orgID, sanctionID); err != nil {
+	_, docScore, docSignals := matching.AutoLink(matching.Evidence{FullDocument: true})
+	if err := w.mg.EnsureSanctionedInEdge(ctx, "Organization", orgID, sanctionID, docScore, docSignals); err != nil {
 		return err
 	}
 	stats.EdgesCreated++
@@ -300,21 +305,27 @@ func (w *Worker) linkFullCPF(ctx context.Context, rec SanctionRecord, sanctionID
 		if created {
 			stats.PersonsCreated++
 		}
-		if err := w.mg.EnsureSanctionedInEdge(ctx, "Person", nodeID, sanctionID); err != nil {
+		_, docScore, docSignals := matching.AutoLink(matching.Evidence{FullDocument: true})
+		if err := w.mg.EnsureSanctionedInEdge(ctx, "Person", nodeID, sanctionID, docScore, docSignals); err != nil {
 			return err
 		}
 		stats.EdgesCreated++
 		return nil
 	}
-	if err := w.mg.EnsureSanctionedInEdge(ctx, nodeType, nodeID, sanctionID); err != nil {
+	_, docScore, docSignals := matching.AutoLink(matching.Evidence{FullDocument: true})
+	if err := w.mg.EnsureSanctionedInEdge(ctx, nodeType, nodeID, sanctionID, docScore, docSignals); err != nil {
 		return err
 	}
 	stats.EdgesCreated++
 	return nil
 }
 
-// linkMaskedCPF: never auto-links. Any Politician whose CPF matches the masked
-// middle digits is queued for human review.
+// linkMaskedCPF: CGU masks CPFs on the person registries (***.435.151-**), so the
+// six visible middle digits are compared against the full CPF we hold from TSE.
+// That alone is not an identification — several people share any six middle
+// digits — so the link is scored (see package matching): six digits AND an exact
+// name reach document grade and link automatically; anything less, or evidence
+// that fits more than one politician, goes to a human.
 func (w *Worker) linkMaskedCPF(ctx context.Context, rec SanctionRecord, sanctionID string, stats *Stats) error {
 	matches, err := w.mg.MatchPoliticiansByMaskedCPF(ctx, rec.MaskedCPF)
 	if err != nil {
@@ -325,15 +336,40 @@ func (w *Worker) linkMaskedCPF(ctx context.Context, rec SanctionRecord, sanction
 	}
 	for _, m := range matches {
 		stats.MaskedCPFMatches++
-		created, err := w.queueReview(ctx, rec, sanctionID, m.ID, m.Name)
+
+		auto, score, signals := matching.AutoLink(matching.Evidence{
+			MaskedCPF:   true,
+			SourceName:  rec.Name,
+			SubjectName: m.Name,
+			Candidates:  len(matches),
+		})
+		if !auto {
+			created, err := w.queueReview(ctx, rec, sanctionID, m.ID, m.Name, score, signals)
+			if err != nil {
+				return err
+			}
+			if created {
+				stats.PendingReviews++
+			} else {
+				stats.SkippedDuplicateReview++
+			}
+			continue
+		}
+
+		// LGPD resurrection guard, same as the full-CPF path.
+		purged, err := w.pg.IsSubjectPurged(ctx, psql.TombstoneKeyName(m.Name))
 		if err != nil {
 			return err
 		}
-		if created {
-			stats.PendingReviews++
-		} else {
-			stats.SkippedDuplicateReview++
+		if purged {
+			stats.SkippedTombstoned++
+			continue
 		}
+		if err := w.mg.EnsureSanctionedInEdge(ctx, "Politician", m.ID, sanctionID, score, signals); err != nil {
+			return err
+		}
+		stats.EdgesCreated++
+		stats.AutoLinked++
 	}
 	return nil
 }
@@ -353,7 +389,8 @@ func (w *Worker) linkNameOnly(ctx context.Context, rec SanctionRecord, sanctionI
 	if polID == "" {
 		return nil
 	}
-	created, err := w.queueReview(ctx, rec, sanctionID, polID, name)
+	score, signals := matching.Score(matching.Evidence{SourceName: rec.Name, SubjectName: name})
+	created, err := w.queueReview(ctx, rec, sanctionID, polID, name, score, signals)
 	if err != nil {
 		return err
 	}
@@ -369,7 +406,7 @@ func (w *Worker) linkNameOnly(ctx context.Context, rec SanctionRecord, sanctionI
 // (sanction_id, politician_id) pair: if an equal review already exists in ANY
 // status (including operator-rejected), it is NOT re-filed. Returns whether a new
 // review row was created.
-func (w *Worker) queueReview(ctx context.Context, rec SanctionRecord, sanctionID, politicianID, politicianName string) (bool, error) {
+func (w *Worker) queueReview(ctx context.Context, rec SanctionRecord, sanctionID, politicianID, politicianName string, confidence float64, signals []string) (bool, error) {
 	exists, err := w.pg.HasSanctionReview(ctx, sanctionID, politicianID)
 	if err != nil {
 		return false, err
@@ -378,13 +415,15 @@ func (w *Worker) queueReview(ctx context.Context, rec SanctionRecord, sanctionID
 		return false, nil
 	}
 	payload, _ := json.Marshal(map[string]any{
-		"sanction_id":     sanctionID,
-		"politician_id":   politicianID,
-		"politician_name": politicianName,
-		"registry":        rec.Registry,
-		"sanctioned_name": rec.Name,
-		"masked_cpf":      rec.MaskedCPF,
-		"source_url":      rec.SourceURL,
+		"sanction_id":        sanctionID,
+		"politician_id":      politicianID,
+		"politician_name":    politicianName,
+		"confidence":         confidence,
+		"confidence_signals": signals,
+		"registry":           rec.Registry,
+		"sanctioned_name":    rec.Name,
+		"masked_cpf":         rec.MaskedCPF,
+		"source_url":         rec.SourceURL,
 	})
 	if err := w.pg.CreatePendingReview(ctx, "possible_politician_sanction", payload, workerName); err != nil {
 		return false, err

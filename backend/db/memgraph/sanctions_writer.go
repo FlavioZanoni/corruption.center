@@ -81,20 +81,32 @@ RETURN s.id AS id
 
 // EnsureSanctionedInEdge creates the SANCTIONED_IN edge from a subject node
 // (Politician/Person/Organization) to a Sanction node.
-func (db *DB) EnsureSanctionedInEdge(ctx context.Context, nodeType, nodeID, sanctionID string) error {
+// confidence and confidence_signals are recorded on every SANCTIONED_IN edge so
+// an automatic link can always be explained: which evidence identified this
+// person, and how strong it was (see package matching).
+func (db *DB) EnsureSanctionedInEdge(ctx context.Context, nodeType, nodeID, sanctionID string, confidence float64, signals []string) error {
 	switch nodeType {
 	case "Politician", "Person", "Organization":
 	default:
 		return fmt.Errorf("memgraph: invalid sanctioned-in node type %q", nodeType)
+	}
+	if signals == nil {
+		signals = []string{}
 	}
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 	query := fmt.Sprintf(`
 MATCH (n:%s {id: $node_id})
 MATCH (s:Sanction {id: $sanction_id})
-MERGE (n)-[:SANCTIONED_IN]->(s)
+MERGE (n)-[r:SANCTIONED_IN]->(s)
+SET r.confidence = $confidence, r.confidence_signals = $signals
 `, nodeType)
-	_, err := session.Run(ctx, query, map[string]any{"node_id": nodeID, "sanction_id": sanctionID})
+	_, err := session.Run(ctx, query, map[string]any{
+		"node_id":     nodeID,
+		"sanction_id": sanctionID,
+		"confidence":  confidence,
+		"signals":     signals,
+	})
 	if err != nil {
 		return fmt.Errorf("memgraph: ensure sanctioned-in edge: %w", err)
 	}

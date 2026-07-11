@@ -118,7 +118,7 @@ func TestQueueReviewDedup(t *testing.T) {
 
 	dup := &fakeStore{hasReview: true}
 	w := &Worker{pg: dup}
-	created, err := w.queueReview(context.Background(), rec, "sanc_1", "pol_1", "Politician")
+	created, err := w.queueReview(context.Background(), rec, "sanc_1", "pol_1", "Politician", 0.6, []string{"masked_cpf_middle6"})
 	if err != nil {
 		t.Fatalf("queueReview: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestQueueReviewDedup(t *testing.T) {
 
 	fresh := &fakeStore{hasReview: false}
 	w = &Worker{pg: fresh}
-	created, err = w.queueReview(context.Background(), rec, "sanc_1", "pol_1", "Politician")
+	created, err = w.queueReview(context.Background(), rec, "sanc_1", "pol_1", "Politician", 0.6, []string{"masked_cpf_middle6"})
 	if err != nil {
 		t.Fatalf("queueReview: %v", err)
 	}

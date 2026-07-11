@@ -28,8 +28,8 @@ type djenStore interface {
 	UpdateDjenPolledAt(ctx context.Context, caseNumber string, polledAt time.Time) error
 	CreatePendingReview(ctx context.Context, reviewType string, payload []byte, worker string) error
 	IsCaseTracked(ctx context.Context, caseNumber string) (bool, error)
-	HasDjenCaseCandidate(ctx context.Context, caseNumber string) (bool, error)
 	HasPartyMatchReview(ctx context.Context, politicianID, proceedingID string) (bool, error)
+	UpsertWatcherCase(ctx context.Context, caseNumber, tribunalEndpoint, scandalID, proceedingID, addedBy string) error
 	IsSubjectPurged(ctx context.Context, keys ...string) (bool, error)
 }
 
@@ -64,9 +64,12 @@ type RunStats struct {
 	PoliticiansScanned int `json:"politicians_scanned"`
 	NamesSearched      int `json:"names_searched"`
 	CandidatesFlagged  int `json:"candidate_cases_flagged"`
-	SkippedTracked     int `json:"skipped_already_tracked"`
-	SkippedExisting    int `json:"skipped_already_reviewed"`
-	SkippedClass       int `json:"skipped_class_filter"`
+	// CasesRegistered counts cases DJEN discovered and started watching without
+	// human review: registering a case makes no claim about any person.
+	CasesRegistered int `json:"cases_registered"`
+	SkippedTracked  int `json:"skipped_already_tracked"`
+	SkippedExisting int `json:"skipped_already_reviewed"`
+	SkippedClass    int `json:"skipped_class_filter"`
 	// SkippedTombstoned counts parties whose name was LGPD-purged: the Person or
 	// Organization node is NOT re-created (resurrection guard, migration 008).
 	SkippedTombstoned int `json:"skipped_tombstoned"`
@@ -392,31 +395,54 @@ func (w *Worker) runNameMode(ctx context.Context, opts Options, pols []memgraph.
 					stats.SkippedTracked++
 					continue
 				}
-				exists, err := w.pg.HasDjenCaseCandidate(ctx, caseDigits)
-				if err != nil {
-					return err
-				}
-				if exists {
-					stats.SkippedExisting++
-					continue
-				}
 				if !groupHasAllowedClass(group) {
 					stats.SkippedClass++
 					continue
 				}
 
 				if !opts.DryRun {
-					payload, _ := json.Marshal(candidatePayload(pol.ID, name, caseNumber, group))
-					if err := w.pg.CreatePendingReview(ctx, "djen_case_candidate", payload, workerName); err != nil {
+					// Registering a case asserts nothing about any person: it
+					// creates the LegalProceeding and starts polling it. The claim
+					// "this politician is a defendant" is a separate, name-only
+					// inference and still goes to review (case mode / rematch).
+					// So no human is needed here — the discovery is the case, and
+					// its provenance (DJEN publication) is recorded on the case.
+					if err := w.registerDiscoveredCase(ctx, caseDigits, group); err != nil {
 						return err
 					}
-					stats.PendingReviews++
+					stats.CasesRegistered++
 				}
 				stats.CandidatesFlagged++
 			}
 		}
 	}
 	return nil
+}
+
+// registerDiscoveredCase starts watching a case DJEN surfaced, with no human in
+// the loop. It creates the LegalProceeding and the watcher_tracking row so the
+// DataJud watcher polls its status and DJEN case mode pulls its full party
+// roster on the next run.
+//
+// The case is registered with no scandal: DJEN found it through one politician's
+// name, which says nothing about which scandal (if any) it belongs to. An
+// operator can attach it to a scandal later; until then it stands alone.
+func (w *Worker) registerDiscoveredCase(ctx context.Context, caseNumber string, group []Item) error {
+	if len(caseNumber) != 20 {
+		w.log.Warn("djen: refusing to register a case whose number is not 20 digits", "case", caseNumber)
+		return nil
+	}
+	endpoint := endpointForGroup(group)
+	if endpoint == "" {
+		w.log.Warn("djen: no tribunal on the publication; cannot resolve a DataJud endpoint", "case", caseNumber)
+		return nil
+	}
+
+	lpID, err := w.mg.UpsertLegalProceedingByCase(ctx, memgraph.DataJudProceedingUpsert{CaseNumber: caseNumber})
+	if err != nil {
+		return err
+	}
+	return w.pg.UpsertWatcherCase(ctx, caseNumber, endpoint, "", lpID, workerName)
 }
 
 func namesFor(pol memgraph.PoliticianNames) []string {
@@ -430,53 +456,6 @@ func namesFor(pol memgraph.PoliticianNames) []string {
 		}
 	}
 	return out
-}
-
-func candidatePayload(politicianID, matchedName, caseNumber string, group []Item) map[string]any {
-	classes := map[string]bool{}
-	polos := map[string]bool{}
-	tribunals := map[string]bool{}
-	links := make([]string, 0, 5)
-	norm := normalizeName(matchedName)
-	primarySigla := "" // first non-empty siglaTribunal, the case's home tribunal
-
-	for _, it := range group {
-		if strings.TrimSpace(it.NomeClasse) != "" {
-			classes[it.NomeClasse] = true
-		}
-		if s := strings.TrimSpace(it.SiglaTribunal); s != "" {
-			tribunals[s] = true
-			if primarySigla == "" {
-				primarySigla = s
-			}
-		}
-		for _, d := range it.Destinatarios {
-			if normalizeName(d.Nome) == norm && strings.TrimSpace(d.Polo) != "" {
-				polos[d.Polo] = true
-			}
-		}
-		if it.Link != "" && len(links) < 5 {
-			links = append(links, it.Link)
-		}
-	}
-
-	// The backoffice registers the case on approval and needs the exact fields
-	// below (contract shared with the backoffice consumer):
-	//   case_number       — 20-digit digits-only string
-	//   tribunal_sigla    — e.g. "TRF4"
-	//   tribunal_endpoint — "api_publica_" + lowercase sigla
-	return map[string]any{
-		"case_number":       normalizeCaseNumber(caseNumber),
-		"tribunal_sigla":    primarySigla,
-		"tribunal_endpoint": tribunalEndpoint(primarySigla),
-		"politician_id":     politicianID,
-		"matched_name":      matchedName,
-		"tribunals":         sortedKeys(tribunals),
-		"classes":           sortedKeys(classes),
-		"polos":             sortedKeys(polos),
-		"sample_links":      links,
-		"item_count":        len(group),
-	}
 }
 
 // tribunalEndpoint maps a tribunal sigla (e.g. "TRF4") to the DataJud public
@@ -790,4 +769,17 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// endpointForGroup resolves the DataJud index to poll from the tribunal that
+// published the case ("TRF1" → "api_publica_trf1"). Returns "" when no
+// publication in the group names a tribunal, in which case the case cannot be
+// watched and is not registered.
+func endpointForGroup(group []Item) string {
+	for _, it := range group {
+		if sigla := strings.TrimSpace(it.SiglaTribunal); sigla != "" {
+			return tribunalEndpoint(sigla)
+		}
+	}
+	return ""
 }

@@ -183,21 +183,6 @@ func TestGroupByProcessoAndAllowedClass(t *testing.T) {
 	}
 }
 
-func TestCandidatePayloadPolos(t *testing.T) {
-	items := parseFixture(t)
-	group := groupByProcesso(items)["10000000020234013700"]
-	payload := candidatePayload("pol_2", "João da Silva", "10000000020234013700", group)
-
-	polos, _ := payload["polos"].([]string)
-	if len(polos) != 1 || polos[0] != "P" {
-		t.Fatalf("expected polo [P], got %v", polos)
-	}
-	links, _ := payload["sample_links"].([]string)
-	if len(links) == 0 {
-		t.Fatalf("expected sample links")
-	}
-}
-
 func TestNormalizeCaseNumber(t *testing.T) {
 	cases := map[string]string{
 		"5046512-94.2016.4.04.7000": "50465129420164047000", // formatted CNJ → 20 digits
@@ -222,7 +207,7 @@ func TestStripEOutros(t *testing.T) {
 		"FULANO DE TAL E OUTROS":     "FULANO DE TAL",
 		"FULANO DE TAL E OUTRO":      "FULANO DE TAL",
 		"João da Silva e outros (5)": "João da Silva",
-		"FULANO DE TAL":              "FULANO DE TAL", // no marker → unchanged
+		"FULANO DE TAL":              "FULANO DE TAL",        // no marker → unchanged
 		"OUTROS COMERCIO LTDA":       "OUTROS COMERCIO LTDA", // "OUTROS" not a trailing marker
 	}
 	for in, want := range cases {
@@ -266,7 +251,7 @@ func TestIsCompanyName(t *testing.T) {
 		{"João da Silva", false},
 		{"Maria Aparecida de Sousa", false},
 		{"Sergio Cabral Coelho", false},
-		{"Ana Sá", false},   // "SA" appears only inside a token, not standalone
+		{"Ana Sá", false}, // "SA" appears only inside a token, not standalone
 		{"Rosana Meireles", false},
 		{"", false},
 	}
@@ -297,30 +282,14 @@ func TestClassFilterJuriBoundary(t *testing.T) {
 	}
 }
 
-func TestCandidatePayloadTribunalContract(t *testing.T) {
+func TestEndpointForGroup(t *testing.T) {
 	items := parseFixture(t)
 	group := groupByProcesso(items)["10000000020234013700"]
-	payload := candidatePayload("pol_2", "João da Silva", "10000000020234013700", group)
-
-	if got := payload["case_number"]; got != "10000000020234013700" {
-		t.Fatalf("case_number = %v, want 20-digit digits-only", got)
+	if got := endpointForGroup(group); got != "api_publica_trf1" {
+		t.Fatalf("endpointForGroup = %q, want api_publica_trf1", got)
 	}
-	if got := payload["tribunal_sigla"]; got != "TRF1" {
-		t.Fatalf("tribunal_sigla = %v, want TRF1", got)
-	}
-	if got := payload["tribunal_endpoint"]; got != "api_publica_trf1" {
-		t.Fatalf("tribunal_endpoint = %v, want api_publica_trf1", got)
-	}
-	// Contract must also round-trip a formatted CNJ input to 20-digit form.
-	p2 := candidatePayload("pol_2", "X", "5046512-94.2016.4.04.7000", group)
-	if got := p2["case_number"]; got != "50465129420164047000" {
-		t.Fatalf("case_number = %v, want digits-only 20-digit", got)
-	}
-	// Existing politician/name/class/link fields still present.
-	for _, k := range []string{"politician_id", "matched_name", "classes", "sample_links"} {
-		if _, ok := payload[k]; !ok {
-			t.Fatalf("payload missing expected key %q", k)
-		}
+	if got := endpointForGroup([]Item{{}}); got != "" {
+		t.Fatalf("a publication with no tribunal must not resolve an endpoint, got %q", got)
 	}
 }
 
