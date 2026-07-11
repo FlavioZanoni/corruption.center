@@ -9,10 +9,15 @@ import (
 )
 
 func VerifyMovementCodes(ctx context.Context) (bool, error) {
+	// Case-level state-machine movement codes (see docs/workerDetails/DATAJUD.md).
 	required := map[string][]string{
-		"51":  {"den", "receb"},
-		"901": {"prescri"},
-		"981": {"desmembr"},
+		"51":  {"receb", "den"}, // Recebimento de denúncia
+		"60":  {"conden"},       // Condenação
+		"61":  {"absolv"},       // Absolvição
+		"848": {"senten"},       // Sentença
+		"901": {"prescri"},      // Prescrição
+		"132": {"baixa"},        // Baixa definitiva
+		"246": {"arquiv"},       // Arquivamento definitivo
 	}
 
 	for code, keywords := range required {

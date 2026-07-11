@@ -32,7 +32,10 @@ if [ "$ENABLE_WRITES" = "true" ]; then
 fi
 
 if [ -z "${DATAJUD_API_KEY:-}" ]; then
-  echo "[datajud-watcher] DATAJUD_API_KEY not set; worker will try wiki fetch on startup" >&2
+  echo "[datajud-watcher] DATAJUD_API_KEY is not set; the worker requires it and would exit immediately." >&2
+  echo "[datajud-watcher] Get the current public key at https://datajud-wiki.cnj.jus.br/api-publica/acesso/ (it rotates)" >&2
+  echo "[datajud-watcher] and export DATAJUD_API_KEY before running. Failing this run so cron surfaces the stopped poller." >&2
+  exit 1
 fi
 
 echo "[datajud-watcher] checking postgres connectivity" >&2

@@ -18,11 +18,6 @@ type DataJudProceedingUpsert struct {
 	DateFiled  *time.Time
 }
 
-type DataJudPartyMatch struct {
-	NodeType string
-	NodeID   string
-}
-
 func (db *DB) UpsertLegalProceedingByCase(ctx context.Context, p DataJudProceedingUpsert) (string, error) {
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
@@ -81,43 +76,10 @@ MERGE (lp)-[:INVESTIGATES]->(s)
 	return nil
 }
 
-func (db *DB) FindDefendantByDocument(ctx context.Context, doc string) (*DataJudPartyMatch, error) {
-	doc = digitsOnly(doc)
-	if doc == "" {
-		return nil, nil
-	}
-	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
-	defer session.Close(ctx)
-
-	if len(doc) == 11 {
-		res, err := session.Run(ctx, `MATCH (p:Politician {cpf: $cpf}) RETURN p.id AS id LIMIT 1`, map[string]any{"cpf": doc})
-		if err != nil {
-			return nil, err
-		}
-		if res.Next(ctx) {
-			id, _ := res.Record().Get("id")
-			if s, ok := id.(string); ok {
-				return &DataJudPartyMatch{NodeType: "Politician", NodeID: s}, nil
-			}
-		}
-	}
-
-	if len(doc) == 14 {
-		res, err := session.Run(ctx, `MATCH (o:Organization {cnpj: $cnpj}) RETURN o.id AS id LIMIT 1`, map[string]any{"cnpj": doc})
-		if err != nil {
-			return nil, err
-		}
-		if res.Next(ctx) {
-			id, _ := res.Record().Get("id")
-			if s, ok := id.(string); ok {
-				return &DataJudPartyMatch{NodeType: "Organization", NodeID: s}, nil
-			}
-		}
-	}
-
-	return nil, nil
-}
-
+// EnsureDefendantInEdge links a Person/Organization node to a LegalProceeding
+// with a DEFENDANT_IN edge carrying an outcome. The DataJud watcher no longer
+// discovers parties (the public API exposes none); this is retained for the
+// DJEN worker, which owns party discovery.
 func (db *DB) EnsureDefendantInEdge(ctx context.Context, nodeType, nodeID, proceedingID, outcome string) error {
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
@@ -134,81 +96,31 @@ SET r.outcome = $outcome
 	return nil
 }
 
-func (db *DB) UpsertUnknownPerson(ctx context.Context, name, cpfMasked string) (string, error) {
-	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(ctx)
-	id := "person_unknown_" + strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "_"))
-	res, err := session.Run(ctx, `
-MERGE (p:Person {id: $id})
-SET p.name = $name, p.cpf = $cpf
-RETURN p.id AS id
-`, map[string]any{"id": id, "name": name, "cpf": cpfMasked})
-	if err != nil {
-		return "", err
-	}
-	if !res.Next(ctx) {
-		if err := res.Err(); err != nil {
-			return "", err
-		}
-		return "", fmt.Errorf("memgraph: upsert unknown person no rows")
-	}
-	v, _ := res.Record().Get("id")
-	id, _ = v.(string)
-	return id, nil
-}
-
-func (db *DB) UpsertUnknownOrganization(ctx context.Context, cnpj string) (string, error) {
-	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(ctx)
-	id := "org_" + digitsOnly(cnpj)
-	res, err := session.Run(ctx, `
-MERGE (o:Organization {cnpj: $cnpj})
-ON CREATE SET o.id = $id
-RETURN o.id AS id
-`, map[string]any{"id": id, "cnpj": digitsOnly(cnpj)})
-	if err != nil {
-		return "", err
-	}
-	if !res.Next(ctx) {
-		if err := res.Err(); err != nil {
-			return "", err
-		}
-		return "", fmt.Errorf("memgraph: upsert unknown organization no rows")
-	}
-	v, _ := res.Record().Get("id")
-	id, _ = v.(string)
-	return id, nil
-}
-
-func (db *DB) SearchPoliticianByNameState(ctx context.Context, name string) (string, error) {
-	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
-	defer session.Close(ctx)
-	res, err := session.Run(ctx, `
-MATCH (p:Politician)
-WHERE toLower(p.name) = toLower($name)
-RETURN p.id AS id LIMIT 1
-`, map[string]any{"name": strings.TrimSpace(name)})
-	if err != nil {
-		return "", err
-	}
-	if res.Next(ctx) {
-		id, _ := res.Record().Get("id")
-		if s, ok := id.(string); ok {
-			return s, nil
-		}
-	}
-	return "", nil
-}
-
-func (db *DB) UpdateProceedingStatusByID(ctx context.Context, proceedingID, status string) error {
+// UpdateProceedingCaseState applies the case-level movement state machine onto
+// a LegalProceeding. phase (when non-empty) sets lp.phase; hasConviction is the
+// value recomputed from the full movement history each poll and is written
+// verbatim (NOT OR-latched) so that a conviction later reversed on appeal — an
+// explicit Absolvição after a Condenação — clears lp.has_conviction rather than
+// leaving a stale (defamation-grade) true; concluded sets lp.status =
+// "concluded". All flags are case-level — per-defendant outcomes are set only
+// via backoffice review (see docs/workerDetails/DATAJUD.md).
+func (db *DB) UpdateProceedingCaseState(ctx context.Context, proceedingID, phase string, hasConviction, concluded bool) error {
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 	_, err := session.Run(ctx, `
 MATCH (lp:LegalProceeding {id: $id})
-SET lp.status = $status
-`, map[string]any{"id": proceedingID, "status": status})
+SET
+  lp.phase = CASE WHEN $phase <> '' THEN $phase ELSE lp.phase END,
+  lp.has_conviction = $has_conviction,
+  lp.status = CASE WHEN $concluded THEN 'concluded' ELSE lp.status END
+`, map[string]any{
+		"id":             proceedingID,
+		"phase":          phase,
+		"has_conviction": hasConviction,
+		"concluded":      concluded,
+	})
 	if err != nil {
-		return err
+		return fmt.Errorf("memgraph: update proceeding case state: %w", err)
 	}
 	return nil
 }
@@ -218,6 +130,8 @@ func legalProceedingID(caseNumber string) string {
 	return "lp_" + strings.ReplaceAll(strings.ReplaceAll(clean, ".", ""), "-", "")
 }
 
+// digitsOnly strips everything but ASCII digits. Package-level helper shared by
+// other memgraph writers (e.g. sanctions_writer.go).
 func digitsOnly(s string) string {
 	var b strings.Builder
 	for _, r := range s {

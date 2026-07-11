@@ -7,15 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 )
 
-const (
-	defaultAPIBase = "https://api-publica.datajud.cnj.jus.br"
-	wikiURL        = "https://datajud-wiki.cnj.jus.br/api-publica"
-)
+const defaultAPIBase = "https://api-publica.datajud.cnj.jus.br"
 
 type Client struct {
 	apiBase string
@@ -23,20 +19,25 @@ type Client struct {
 	http    *http.Client
 }
 
+// CaseSource is the subset of the DataJud public API _source we consume.
+// Per Portaria CNJ 160/2020 the public API never returns partes[] or
+// processoRelacionado[], so those are intentionally absent: the watcher is a
+// case-level status engine only (see docs/workerDetails/DATAJUD.md).
 type CaseSource struct {
-	NumeroProcesso      string                     `json:"numeroProcesso"`
-	NivelSigilo         int                        `json:"nivelSigilo"`
-	Classe              map[string]any             `json:"classe"`
-	Assuntos            []map[string]any           `json:"assuntos"`
-	DataAjuizamento     string                     `json:"dataAjuizamento"`
-	OrgaoJulgador       map[string]any             `json:"orgaoJulgador"`
-	Partes              []map[string]any           `json:"partes"`
-	Movimentos          []map[string]any           `json:"movimentos"`
-	ProcessoRelacionado []map[string]any           `json:"processoRelacionado"`
-	Raw                 map[string]any             `json:"-"`
-	RawJSON             map[string]json.RawMessage `json:"-"`
+	NumeroProcesso  string           `json:"numeroProcesso"`
+	NivelSigilo     int              `json:"nivelSigilo"`
+	Classe          map[string]any   `json:"classe"`
+	Assuntos        []map[string]any `json:"assuntos"`
+	DataAjuizamento string           `json:"dataAjuizamento"`
+	OrgaoJulgador   map[string]any   `json:"orgaoJulgador"`
+	Movimentos      []map[string]any `json:"movimentos"`
+	Raw             map[string]any   `json:"-"`
 }
 
+// NewClient builds a DataJud client. The API key comes only from the caller
+// (wired from the DATAJUD_API_KEY env var); it is never hardcoded or fetched
+// from the wiki. The public key rotates and is published at
+// https://datajud-wiki.cnj.jus.br/api-publica/acesso/.
 func NewClient(ctx context.Context, apiBase, apiKey string) (*Client, error) {
 	base := strings.TrimSpace(apiBase)
 	if base == "" {
@@ -44,11 +45,7 @@ func NewClient(ctx context.Context, apiBase, apiKey string) (*Client, error) {
 	}
 	key := strings.TrimSpace(apiKey)
 	if key == "" {
-		var err error
-		key, err = fetchAPIKeyFromWiki(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("datajud: resolve api key (set DATAJUD_API_KEY or ensure wiki key is available): %w", err)
-		}
+		return nil, fmt.Errorf("datajud: DATAJUD_API_KEY is required")
 	}
 	return &Client{apiBase: strings.TrimRight(base, "/"), apiKey: key, http: &http.Client{Timeout: 45 * time.Second}}, nil
 }
@@ -95,26 +92,4 @@ func (c *Client) SearchByCaseNumber(ctx context.Context, tribunalEndpoint, caseN
 	}
 	src.Raw = sourceRaw
 	return &src, nil
-}
-
-func fetchAPIKeyFromWiki(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wikiURL, nil)
-	if err != nil {
-		return "", err
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(res.Body, 2*1024*1024))
-	if err != nil {
-		return "", err
-	}
-	re := regexp.MustCompile(`(?i)api\s*key\s*[:\s]+([A-Za-z0-9]{20,})`)
-	m := re.FindStringSubmatch(string(b))
-	if len(m) < 2 {
-		return "", fmt.Errorf("api key not found on wiki page")
-	}
-	return m[1], nil
 }

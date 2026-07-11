@@ -2,8 +2,8 @@ package datajud
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -35,14 +35,10 @@ type RunStats struct {
 	CasesRestricted   int
 	CasesNotFound     int
 	CasesUpdated      int
+	CasesConcluded    int
 	ProbeFieldsOK     bool
-	ProbeHasPartes    bool
-	ProbeHasRelated   bool
 	TPUVerificationOK bool
 	VerificationNotes []string
-	DefendantsLinked  int
-	PendingReviews    int
-	RelatedCasesAdded int
 }
 
 func NewWorker(ctx context.Context, pg *psql.DB, mg *memgraph.DB, opts Options) (*Worker, error) {
@@ -86,18 +82,12 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 			}
 			stats.VerificationNotes = append(stats.VerificationNotes, "probe case not found in non-strict mode")
 		} else {
-			stats.ProbeFieldsOK, stats.ProbeHasPartes, stats.ProbeHasRelated = probeCapabilities(raw)
+			stats.ProbeFieldsOK = probeCapabilities(raw)
 			if !stats.ProbeFieldsOK {
 				if opts.StrictVerify {
 					return nil, fmt.Errorf("datajud: probe response missing core fields (numeroProcesso or movimentos)")
 				}
 				stats.VerificationNotes = append(stats.VerificationNotes, "probe response missing core fields; continuing in non-strict mode")
-			}
-			if !stats.ProbeHasPartes {
-				stats.VerificationNotes = append(stats.VerificationNotes, "probe response did not include partes[].documento (tribunal/dataset variability)")
-			}
-			if !stats.ProbeHasRelated {
-				stats.VerificationNotes = append(stats.VerificationNotes, "probe response did not include processoRelacionado entries (tribunal/dataset variability)")
 			}
 		}
 	}
@@ -122,19 +112,40 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 		stats.CasesPolled++
 		if src == nil {
 			stats.CasesNotFound++
-			_ = w.pg.UpdateWatcherTrackingPoll(ctx, c.CaseNumber, c.LastMovementID, c.Status, time.Now().UTC())
+			// Read-only runs never mutate watcher_tracking (not even
+			// last_polled_at): Postgres tracking must stay in lockstep with the
+			// graph, which is only written when EnableWrites is set.
+			if opts.EnableWrites {
+				_ = w.pg.UpdateWatcherTrackingPoll(ctx, c.CaseNumber, c.LastMovementID, c.Status, time.Now().UTC())
+			}
 			continue
 		}
 		if src.NivelSigilo > 0 {
 			stats.CasesRestricted++
-			_ = w.pg.UpdateWatcherTrackingPoll(ctx, c.CaseNumber, c.LastMovementID, c.Status, time.Now().UTC())
+			if opts.EnableWrites {
+				_ = w.pg.UpdateWatcherTrackingPoll(ctx, c.CaseNumber, c.LastMovementID, c.Status, time.Now().UTC())
+			}
 			continue
 		}
 
-		if opts.EnableWrites {
-			if err := w.applyCaseWrites(ctx, c, src, stats); err != nil {
-				return nil, err
-			}
+		state := deriveCaseState(src.Movimentos)
+
+		newStatus := c.Status
+		if state.concluded {
+			newStatus = "concluded"
+			stats.CasesConcluded++
+		}
+
+		// Fully read-only when writes are disabled: derived state and stats are
+		// reported (dry run), but neither the graph nor watcher_tracking is
+		// mutated. Gating the status flip and last_movement_id advance here keeps
+		// Postgres from desynchronizing from the skipped graph write.
+		if !opts.EnableWrites {
+			continue
+		}
+
+		if err := w.applyCaseWrites(ctx, c, src, state); err != nil {
+			return nil, err
 		}
 
 		last := maxMovementID(src.Movimentos)
@@ -142,7 +153,7 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 		if last != "" {
 			lastStr = &last
 		}
-		if err := w.pg.UpdateWatcherTrackingPoll(ctx, c.CaseNumber, lastStr, c.Status, time.Now().UTC()); err != nil {
+		if err := w.pg.UpdateWatcherTrackingPoll(ctx, c.CaseNumber, lastStr, newStatus, time.Now().UTC()); err != nil {
 			return nil, err
 		}
 		stats.CasesUpdated++
@@ -151,7 +162,7 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 	return stats, nil
 }
 
-func (w *Worker) applyCaseWrites(ctx context.Context, c psql.WatcherCase, src *CaseSource, stats *RunStats) error {
+func (w *Worker) applyCaseWrites(ctx context.Context, c psql.WatcherCase, src *CaseSource, state caseState) error {
 	if w.mg == nil {
 		return fmt.Errorf("datajud: memgraph writer is required when --enable-writes is true")
 	}
@@ -174,202 +185,226 @@ func (w *Worker) applyCaseWrites(ctx context.Context, c psql.WatcherCase, src *C
 		}
 	}
 
-	outcome := deriveOutcome(src.Movimentos)
-	if outcome == "prescribed" || movementExists(src.Movimentos, "132") || movementExists(src.Movimentos, "246") {
-		if err := w.mg.UpdateProceedingStatusByID(ctx, proceedingID, "concluded"); err != nil {
-			return err
-		}
-	}
-
-	if err := w.handleParties(ctx, c, proceedingID, outcome, src.Partes, stats); err != nil {
-		return err
-	}
-
-	if err := w.handleRelatedCases(ctx, c, src, stats); err != nil {
+	if err := w.mg.UpdateProceedingCaseState(ctx, proceedingID, state.phase, state.hasConviction, state.concluded); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (w *Worker) handleParties(ctx context.Context, c psql.WatcherCase, proceedingID, outcome string, partes []map[string]any, stats *RunStats) error {
-	for _, p := range partes {
-		doc := strings.TrimSpace(fmt.Sprintf("%v", p["documento"]))
-		name := strings.TrimSpace(fmt.Sprintf("%v", p["nome"]))
-		docDigits := digitsOnly(doc)
+// caseState is the case-level status derived from movements. All flags are
+// case-level; per-defendant outcomes are set only via backoffice review using
+// DJEN evidence (see docs/workerDetails/DATAJUD.md).
+type caseState struct {
+	phase         string // "" | "accepted" | "sentenced"
+	hasConviction bool
+	concluded     bool
+}
 
-		if len(docDigits) == 11 || len(docDigits) == 14 {
-			match, err := w.mg.FindDefendantByDocument(ctx, docDigits)
-			if err != nil {
-				return err
+// deriveCaseState implements the case-level movement state machine:
+//
+//	51  Recebimento de denúncia   -> phase = accepted
+//	848 Sentença                  -> phase = sentenced (+ complement inference)
+//	60  Condenação                -> has_conviction = true
+//	61  Absolvição                -> explicitly not a conviction (timeline only)
+//	901 Prescrição                -> concluded
+//	132 Baixa definitiva          -> concluded
+//	246 Arquivamento definitivo   -> concluded
+//
+// sentenced takes precedence over accepted regardless of movement order.
+//
+// Conviction is derived with precedence: an explicit disposition movement
+// (code 60 Condenação / 61 Absolvição) always wins over any 848 inference, and
+// the LAST explicit disposition in chronological order is authoritative — a
+// conviction reversed on appeal (a later Absolvição) must clear the conviction
+// rather than latch it (defamation-grade if it did not). Movements are
+// evaluated in chronological order by dataHora, falling back to input order
+// when timestamps are missing or equal. When no explicit 60/61 exists, the
+// disposition of a Sentença (848) is inferred from its nome, complementos, and
+// complementosTabelados — convictions frequently live there (e.g. "Sentença
+// condenatória", "Procedente") rather than as a standalone code-60 movement, so
+// scanning them avoids losing convictions.
+func deriveCaseState(movs []map[string]any) caseState {
+	var st caseState
+	var inferredConviction, inferredAcquittal bool
+	// lastExplicit tracks the most recent (chronological) explicit disposition:
+	// "conviction" (code 60), "acquittal" (code 61), or "" when none was seen.
+	lastExplicit := ""
+	for _, m := range movementsChronological(movs) {
+		switch movementCode(m) {
+		case "51":
+			if st.phase == "" {
+				st.phase = "accepted"
 			}
-			if match != nil {
-				if err := w.mg.EnsureDefendantInEdge(ctx, match.NodeType, match.NodeID, proceedingID, outcome); err != nil {
-					return err
-				}
-				stats.DefendantsLinked++
-				continue
+		case "848":
+			st.phase = "sentenced"
+			conv, acq := sentencaComplementSignals(m)
+			if conv {
+				inferredConviction = true
 			}
-
-			if len(docDigits) == 11 {
-				personID, err := w.mg.UpsertUnknownPerson(ctx, name, maskCPF(docDigits))
-				if err != nil {
-					return err
-				}
-				if err := w.mg.EnsureDefendantInEdge(ctx, "Person", personID, proceedingID, outcome); err != nil {
-					return err
-				}
-				stats.DefendantsLinked++
-				payload, _ := json.Marshal(map[string]any{"case_number": c.CaseNumber, "documento": maskCPF(docDigits), "name": name})
-				if err := w.pg.CreatePendingReview(ctx, "unknown_cpf", payload, "datajud_watcher"); err != nil {
-					return err
-				}
-				stats.PendingReviews++
-				continue
+			if acq {
+				inferredAcquittal = true
 			}
-
-			if len(docDigits) == 14 {
-				orgID, err := w.mg.UpsertUnknownOrganization(ctx, docDigits)
-				if err != nil {
-					return err
-				}
-				if err := w.mg.EnsureDefendantInEdge(ctx, "Organization", orgID, proceedingID, outcome); err != nil {
-					return err
-				}
-				stats.DefendantsLinked++
-				payload, _ := json.Marshal(map[string]any{"case_number": c.CaseNumber, "documento": docDigits, "name": name, "trigger": "cnpj_enricher"})
-				if err := w.pg.CreatePendingReview(ctx, "unknown_cnpj", payload, "datajud_watcher"); err != nil {
-					return err
-				}
-				stats.PendingReviews++
-				continue
-			}
+		case "60":
+			// Condenação. Overwrites any earlier explicit disposition so the
+			// latest one wins.
+			lastExplicit = "conviction"
+		case "61":
+			// Absolvição (e.g. reversed on appeal). Overwrites any earlier
+			// explicit disposition so a later acquittal clears an earlier
+			// conviction rather than latching it.
+			lastExplicit = "acquittal"
+		case "901", "132", "246":
+			st.concluded = true
 		}
+	}
 
-		if name != "" {
-			polID, err := w.mg.SearchPoliticianByNameState(ctx, name)
-			if err != nil {
-				return err
-			}
-			if polID != "" {
-				payload, _ := json.Marshal(map[string]any{"case_number": c.CaseNumber, "name": name, "politician_id": polID})
-				if err := w.pg.CreatePendingReview(ctx, "cpf_partial_match", payload, "datajud_watcher"); err != nil {
-					return err
-				}
-				stats.PendingReviews++
+	switch {
+	case lastExplicit == "conviction":
+		// Latest explicit code 60 wins regardless of any 848 complement text.
+		st.hasConviction = true
+	case lastExplicit == "acquittal":
+		// Latest explicit code 61 wins over any 848 inference.
+		st.hasConviction = false
+	case inferredConviction && !inferredAcquittal:
+		// 848 complement indicates a conviction with no conflicting acquittal.
+		st.hasConviction = true
+	}
+	return st
+}
+
+// movementsChronological returns a copy of movs sorted by dataHora ascending.
+// The sort is stable and only reorders movements with parseable timestamps:
+// when either timestamp is missing/unparseable (or they are equal), the pair
+// keeps its original input order. Sorting a copy leaves the caller's slice
+// (used later by maxMovementID) untouched.
+func movementsChronological(movs []map[string]any) []map[string]any {
+	ordered := make([]map[string]any, len(movs))
+	copy(ordered, movs)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		ti, oki := movementTime(ordered[i])
+		tj, okj := movementTime(ordered[j])
+		if !oki || !okj {
+			return false
+		}
+		return ti.Before(tj)
+	})
+	return ordered
+}
+
+// movementTime parses a movement's dataHora field into a time.Time. It reports
+// ok=false when the field is absent or does not match a known layout, so the
+// caller can fall back to input order.
+func movementTime(m map[string]any) (time.Time, bool) {
+	s := mapString(m, "dataHora")
+	if s == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02T15:04:05.000",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// sentencaComplementSignals inspects a Sentença (code 848) movement to infer
+// its disposition when no explicit Condenação (60) / Absolvição (61) movement is
+// present. It scans the movement's nome, its plain complementos string-list, and
+// its complementosTabelados nome/descricao entries — a conviction may be encoded
+// in any of them (e.g. nome "Sentença condenatória" with no tabulated
+// complement). All text is normalized to lowercase and accent-folded before
+// matching. Because "improcedente" contains "procedente", acquittal signals are
+// checked first and win within a single text fragment.
+func sentencaComplementSignals(m map[string]any) (conviction, acquittal bool) {
+	texts := []string{foldText(mapString(m, "nome"))}
+	for _, c := range stringList(m["complementos"]) {
+		texts = append(texts, foldText(c))
+	}
+	for _, cm := range complementList(m["complementosTabelados"]) {
+		texts = append(texts, foldText(fmt.Sprintf("%v %v", cm["nome"], cm["descricao"])))
+	}
+	for _, text := range texts {
+		switch {
+		case strings.Contains(text, "improcedente"), strings.Contains(text, "absolv"):
+			acquittal = true
+		case strings.Contains(text, "conden"), strings.Contains(text, "procedente"):
+			conviction = true
+		}
+	}
+	return conviction, acquittal
+}
+
+// stringList coerces a plain string-list field (e.g. movimentos[].complementos)
+// into []string, tolerating the []any shape from json.Unmarshal, a directly
+// constructed []string, or a single string value.
+func stringList(v any) []string {
+	switch t := v.(type) {
+	case []string:
+		return t
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			if e == nil {
 				continue
 			}
-
-			personID, err := w.mg.UpsertUnknownPerson(ctx, name, "")
-			if err != nil {
-				return err
-			}
-			if err := w.mg.EnsureDefendantInEdge(ctx, "Person", personID, proceedingID, outcome); err != nil {
-				return err
-			}
-			stats.DefendantsLinked++
-			payload, _ := json.Marshal(map[string]any{"case_number": c.CaseNumber, "name": name})
-			if err := w.pg.CreatePendingReview(ctx, "unknown_cpf", payload, "datajud_watcher"); err != nil {
-				return err
-			}
-			stats.PendingReviews++
+			out = append(out, fmt.Sprintf("%v", e))
 		}
+		return out
+	case string:
+		return []string{t}
 	}
 	return nil
 }
 
-func (w *Worker) handleRelatedCases(ctx context.Context, c psql.WatcherCase, src *CaseSource, stats *RunStats) error {
-	related := parseRelatedCases(src)
-	if movementExists(src.Movimentos, "981") {
-		related = append(related, parseDesmembramentoFromMovements(src.Movimentos)...)
-	}
-
-	for _, rel := range related {
-		caseNum := strings.TrimSpace(rel.CaseNumber)
-		tribunal := strings.TrimSpace(rel.TribunalEndpoint)
-		if caseNum == "" {
-			continue
-		}
-		if tribunal == "" {
-			tribunal = c.TribunalEndpoint
-		}
-
-		tracked, err := w.pg.IsWatcherCaseTracked(ctx, caseNum)
-		if err != nil {
-			return err
-		}
-		if tracked {
-			continue
-		}
-
-		relatedSrc, err := w.client.SearchByCaseNumber(ctx, tribunal, caseNum)
-		if err != nil {
-			return err
-		}
-		if relatedSrc == nil {
-			continue
-		}
-
-		lpID, err := w.mg.UpsertLegalProceedingByCase(ctx, memgraph.DataJudProceedingUpsert{
-			CaseNumber: relatedSrc.NumeroProcesso,
-			Court:      courtName(relatedSrc.OrgaoJulgador),
-			Type:       proceedingTypeFromClasse(relatedSrc.Classe),
-			Status:     "ongoing",
-			Assuntos:   assuntosCodes(relatedSrc.Assuntos),
-			DateFiled:  parseDate(relatedSrc.DataAjuizamento),
-		})
-		if err != nil {
-			return err
-		}
-
-		scandalID := c.ScandalID
-		if scandalID == "" {
-			scandalID, _ = w.pg.GetProceedingScandalID(ctx, c.CaseNumber)
-		}
-		if scandalID != "" {
-			if err := w.mg.EnsureInvestigatesEdge(ctx, lpID, scandalID); err != nil {
-				return err
+// complementList coerces a complementosTabelados value into a slice of maps,
+// tolerating both the []any shape produced by json.Unmarshal into map[string]any
+// and a directly constructed []map[string]any.
+func complementList(v any) []map[string]any {
+	switch t := v.(type) {
+	case []map[string]any:
+		return t
+	case []any:
+		out := make([]map[string]any, 0, len(t))
+		for _, e := range t {
+			if cm, ok := e.(map[string]any); ok {
+				out = append(out, cm)
 			}
 		}
-		if err := w.pg.UpsertWatcherCase(ctx, relatedSrc.NumeroProcesso, tribunal, scandalID, lpID, "watcher"); err != nil {
-			return err
-		}
-		stats.RelatedCasesAdded++
+		return out
 	}
-
 	return nil
 }
 
-func hasRequiredFields(src *CaseSource) bool {
-	coreOK, _, _ := probeCapabilities(src)
-	return coreOK
+// accentFolder maps lowercase Portuguese accented characters to their ASCII
+// base so keyword matching is accent-insensitive.
+var accentFolder = strings.NewReplacer(
+	"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
+	"é", "e", "è", "e", "ê", "e", "ë", "e",
+	"í", "i", "ì", "i", "î", "i", "ï", "i",
+	"ó", "o", "ò", "o", "ô", "o", "õ", "o", "ö", "o",
+	"ú", "u", "ù", "u", "û", "u", "ü", "u",
+	"ç", "c", "ñ", "n",
+)
+
+func foldText(s string) string {
+	return accentFolder.Replace(strings.ToLower(s))
 }
 
-func probeCapabilities(src *CaseSource) (coreOK, hasPartesDocument, hasRelated bool) {
+func probeCapabilities(src *CaseSource) bool {
 	if src == nil {
-		return false, false, false
+		return false
 	}
 	numero := strings.TrimSpace(src.NumeroProcesso)
 	if numero == "" && src.Raw != nil {
 		numero = strings.TrimSpace(fmt.Sprintf("%v", src.Raw["numeroProcesso"]))
-	}
-
-	partes := src.Partes
-	if len(partes) == 0 && src.Raw != nil {
-		if v, ok := src.Raw["partes"].([]any); ok {
-			partes = make([]map[string]any, 0, len(v))
-			for _, it := range v {
-				if m, ok := it.(map[string]any); ok {
-					partes = append(partes, m)
-				}
-			}
-		}
-	}
-	for _, p := range partes {
-		if _, ok := p["documento"]; ok {
-			hasPartesDocument = true
-			break
-		}
 	}
 
 	movsFieldExists := len(src.Movimentos) > 0
@@ -377,16 +412,7 @@ func probeCapabilities(src *CaseSource) (coreOK, hasPartesDocument, hasRelated b
 		_, movsFieldExists = src.Raw["movimentos"]
 	}
 
-	if len(src.ProcessoRelacionado) > 0 {
-		hasRelated = true
-	} else if src.Raw != nil {
-		if v, ok := src.Raw["processoRelacionado"].([]any); ok && len(v) > 0 {
-			hasRelated = true
-		}
-	}
-
-	coreOK = numero != "" && movsFieldExists
-	return coreOK, hasPartesDocument, hasRelated
+	return numero != "" && movsFieldExists
 }
 
 func maxMovementID(movs []map[string]any) string {
@@ -410,78 +436,34 @@ func maxMovementID(movs []map[string]any) string {
 	return strconv.FormatInt(max, 10)
 }
 
-func movementExists(movs []map[string]any, code string) bool {
-	for _, m := range movs {
-		if movementCode(m) == code {
-			return true
-		}
+// mapString returns the trimmed string form of m[key], or "" when the map is
+// nil or the key is absent/nil (avoids fmt's "<nil>" rendering).
+func mapString(m map[string]any, key string) string {
+	if m == nil {
+		return ""
 	}
-	return false
-}
-
-func movementCode(m map[string]any) string {
-	v := m["codigo"]
+	v := m[key]
 	if v == nil {
 		return ""
 	}
 	return strings.TrimSpace(fmt.Sprintf("%v", v))
 }
 
-func deriveOutcome(movs []map[string]any) string {
-	outcome := "pending"
-	for _, m := range movs {
-		switch movementCode(m) {
-		case "60":
-			outcome = "convicted"
-		case "61":
-			outcome = "acquitted"
-		case "901":
-			outcome = "prescribed"
-		case "848":
-			if outcome == "pending" {
-				text := movementText(m)
-				if strings.Contains(text, "conden") || strings.Contains(text, "procedente") {
-					outcome = "convicted"
-				} else if strings.Contains(text, "absolv") || strings.Contains(text, "improcedente") {
-					outcome = "acquitted"
-				}
-			}
-		}
-	}
-	return outcome
-}
-
-func movementText(m map[string]any) string {
-	parts := []string{strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", m["nome"])))}
-	if comps, ok := m["complementos"].([]any); ok {
-		for _, c := range comps {
-			parts = append(parts, strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", c))))
-		}
-	}
-	if comps, ok := m["complementosTabelados"].([]any); ok {
-		for _, c := range comps {
-			parts = append(parts, strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", c))))
-		}
-	}
-	return strings.Join(parts, " ")
+func movementCode(m map[string]any) string {
+	return mapString(m, "codigo")
 }
 
 func proceedingTypeFromClasse(classe map[string]any) string {
-	if classe == nil {
-		return "criminal"
+	if code := mapString(classe, "codigo"); code != "" {
+		return code
 	}
-	code := strings.TrimSpace(fmt.Sprintf("%v", classe["codigo"]))
-	if code == "" {
-		return "criminal"
-	}
-	return code
+	return "criminal"
 }
 
 func assuntosCodes(assuntos []map[string]any) []string {
 	out := make([]string, 0, len(assuntos))
 	for _, a := range assuntos {
-		code := strings.TrimSpace(fmt.Sprintf("%v", a["codigo"]))
-		if code != "" && code != "<nil>" {
+		if code := mapString(a, "codigo"); code != "" {
 			out = append(out, code)
 		}
 	}
@@ -502,90 +484,5 @@ func parseDate(s string) *time.Time {
 }
 
 func courtName(orgao map[string]any) string {
-	if orgao == nil {
-		return ""
-	}
-	return strings.TrimSpace(fmt.Sprintf("%v", orgao["nome"]))
-}
-
-type relatedCase struct {
-	CaseNumber       string
-	TribunalEndpoint string
-}
-
-func parseRelatedCases(src *CaseSource) []relatedCase {
-	if src == nil || src.Raw == nil {
-		return nil
-	}
-	arr, ok := src.Raw["processoRelacionado"].([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]relatedCase, 0, len(arr))
-	for _, it := range arr {
-		m, ok := it.(map[string]any)
-		if !ok {
-			continue
-		}
-		caseNum := strings.TrimSpace(fmt.Sprintf("%v", m["numeroProcesso"]))
-		tribunal := strings.TrimSpace(fmt.Sprintf("%v", m["tribunal"]))
-		if strings.HasPrefix(tribunal, "api_publica_") {
-			out = append(out, relatedCase{CaseNumber: caseNum, TribunalEndpoint: tribunal})
-		}
-	}
-	return out
-}
-
-func parseDesmembramentoFromMovements(movs []map[string]any) []relatedCase {
-	out := make([]relatedCase, 0)
-	for _, m := range movs {
-		if movementCode(m) != "981" {
-			continue
-		}
-		caseNum := extractCaseNumber(movementText(m))
-		if caseNum == "" {
-			continue
-		}
-		out = append(out, relatedCase{CaseNumber: caseNum})
-	}
-	return out
-}
-
-func extractCaseNumber(text string) string {
-	for _, tok := range strings.Fields(text) {
-		cand := strings.Trim(tok, ",.;()[]{}")
-		if isLikelyCaseNumber(cand) {
-			return cand
-		}
-	}
-	return ""
-}
-
-func isLikelyCaseNumber(v string) bool {
-	if len(v) < 20 {
-		return false
-	}
-	for _, r := range v {
-		if (r < '0' || r > '9') && r != '.' && r != '-' {
-			return false
-		}
-	}
-	return strings.Count(v, "-") >= 1
-}
-
-func digitsOnly(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if r >= '0' && r <= '9' {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
-func maskCPF(cpf string) string {
-	if len(cpf) != 11 {
-		return cpf
-	}
-	return cpf[:3] + "***" + cpf[6:9] + "**"
+	return mapString(orgao, "nome")
 }

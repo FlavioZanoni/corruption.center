@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
 type WatcherCase struct {
@@ -59,6 +57,9 @@ func (db *DB) UpdateWatcherTrackingPoll(ctx context.Context, caseNumber string, 
 	return nil
 }
 
+// IsWatcherCaseTracked reports whether a case number is already present in
+// watcher_tracking. Used by the DJEN worker to avoid filing duplicate case
+// candidates.
 func (db *DB) IsWatcherCaseTracked(ctx context.Context, caseNumber string) (bool, error) {
 	var exists bool
 	err := db.conn.QueryRow(ctx, `
@@ -70,6 +71,8 @@ func (db *DB) IsWatcherCaseTracked(ctx context.Context, caseNumber string) (bool
 	return exists, nil
 }
 
+// UpsertWatcherCase inserts a tracked case. addedBy records provenance and is
+// one of "backoffice", "djen", or "watcher".
 func (db *DB) UpsertWatcherCase(ctx context.Context, caseNumber, tribunalEndpoint, scandalID, proceedingID, addedBy string) error {
 	_, err := db.conn.Exec(ctx, `
     INSERT INTO watcher_tracking (
@@ -94,20 +97,4 @@ func (db *DB) CreatePendingReview(ctx context.Context, reviewType string, payloa
 		return fmt.Errorf("psql: create pending review: %w", err)
 	}
 	return nil
-}
-
-func (db *DB) GetProceedingScandalID(ctx context.Context, caseNumber string) (string, error) {
-	var scandalID string
-	err := db.conn.QueryRow(ctx, `
-    SELECT scandal_id FROM watcher_tracking
-    WHERE case_number = $1
-    LIMIT 1
-  `, caseNumber).Scan(&scandalID)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return "", nil
-		}
-		return "", fmt.Errorf("psql: get proceeding scandal id: %w", err)
-	}
-	return scandalID, nil
 }

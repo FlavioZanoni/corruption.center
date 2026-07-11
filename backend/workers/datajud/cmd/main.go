@@ -22,7 +22,7 @@ func main() {
 		verifyTPU     = flag.Bool("verify-tpu", true, "Verify movement codes against TPU public table")
 		strictVerify  = flag.Bool("strict-verify", false, "Fail fast when verification/probe checks are incomplete")
 		pollLimit     = flag.Int("poll-limit", 0, "Max watcher cases to poll (0 = all)")
-		enableWrites  = flag.Bool("enable-writes", false, "Enable graph and pending_review writes from movement processing")
+		enableWrites  = flag.Bool("enable-writes", false, "Enable case-level graph writes (proceeding upsert + phase/has_conviction/status state machine)")
 	)
 	flag.Parse()
 
@@ -37,7 +37,7 @@ func main() {
 
 	var mg *memgraph.DB
 	if *enableWrites {
-		mg, err = memgraph.New(ctx, mustEnv("MEMGRAPH_URI"), mustEnv("MEMGRAPH_USER"), mustEnv("MEMGRAPH_PASS"), pg, log)
+		mg, err = memgraph.New(ctx, mustEnv("MEMGRAPH_URI"), os.Getenv("MEMGRAPH_USER"), os.Getenv("MEMGRAPH_PASS"), pg, log)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "connect memgraph: %v\n", err)
 			os.Exit(1)
