@@ -238,7 +238,7 @@ export function SearchBar() {
   const results = useMemo(() => data?.results ?? [], [data]);
 
   // True while the user is still typing (debounce pending) or a request is in
-  // flight — lets us show "Buscando…" instead of a premature "no results".
+  // flight: lets us show "Buscando…" instead of a premature "no results".
   const trimmedInput = inputValue.trim();
   const isSearching =
     trimmedInput.length >= 2 && (isFetching || searchQuery !== inputValue);

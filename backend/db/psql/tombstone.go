@@ -14,7 +14,7 @@ func TombstoneKeyCPF(cpfDigits string) string  { return "cpf:" + cpfDigits }
 func TombstoneKeyCNPJ(cnpjDigits string) string { return "cnpj:" + cnpjDigits }
 
 // tombstoneAccents folds the Portuguese accent set to ASCII (stdlib-only, same
-// approach as workers/sanctions foldAccent — psql cannot import worker packages).
+// approach as workers/sanctions foldAccent: psql cannot import worker packages).
 var tombstoneAccents = strings.NewReplacer(
 	"Á", "A", "À", "A", "Â", "A", "Ã", "A", "Ä", "A",
 	"É", "E", "È", "E", "Ê", "E", "Ë", "E",

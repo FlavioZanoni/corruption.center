@@ -1,11 +1,11 @@
-# Senado Sync — Deep Dive
+# Senado Sync: Deep Dive
 
 ## Purpose
 
 Fetches **all current federal senators** (`em exercício`) and upserts
 `Politician` nodes.
 Sets `active: true`, updates `party_current`, `role_current`, `photo_url`.
-Source of truth for current mandate — overrides TSE data.
+Source of truth for current mandate; overrides TSE data.
 
 ---
 

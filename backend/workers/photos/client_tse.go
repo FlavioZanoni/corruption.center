@@ -32,7 +32,7 @@ const (
 	// {year}, {uf} and {sq}. It is intentionally the ONLY information we can
 	// derive from (year, uf, SQ_CANDIDATO) alone. Every constructed URL is
 	// runtime-verified (must return image bytes) before it is ever written, so a
-	// wrong template can never produce bad data — it only produces skips.
+	// wrong template can never produce bad data: it only produces skips.
 	//
 	// NOTE (2026-07-10): the divulgacandcontas service that serves individual
 	// candidate photos was under scheduled maintenance during development, so no

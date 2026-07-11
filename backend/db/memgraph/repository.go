@@ -23,6 +23,9 @@ type Repository interface {
 
 	// browse
 	QueryPoliticians(ctx context.Context, filter, party, uf, sort string, page, pageSize int) (*models.PoliticianListResponse, error)
+	QueryScandals(ctx context.Context, sort string, page, pageSize int) (*models.ScandalListResponse, error)
+	QueryProceedings(ctx context.Context, page, pageSize int) (*models.ProceedingListResponse, error)
+	QueryProceeding(ctx context.Context, id string) (*models.ProceedingDetailResponse, error)
 
 	// backoffice writes
 	UpsertLegalProceedingByCase(ctx context.Context, p DataJudProceedingUpsert) (string, error)

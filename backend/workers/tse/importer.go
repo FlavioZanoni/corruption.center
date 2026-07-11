@@ -25,7 +25,7 @@ const (
 // Offices kept from a general election. State-level executives and legislators
 // are included because they are heavily represented in corruption prosecutions
 // (state governors especially) and a name that is not in this base can never be
-// matched to a court party or a sanction — it stays an anonymous Person.
+// matched to a court party or a sanction: it stays an anonymous Person.
 // Municipal offices (prefeito, vereador) are elected in different years and are
 // not covered by these files.
 var allowedCargos = map[string]struct{}{
@@ -151,7 +151,12 @@ func ImportYearFromZipFiles(year int, votacaoZipPath, consultaZipPath, workDir s
 
 	winners := map[string]winnerRow{}
 	if brFile != "" {
-		if err := processVotacaoFile(brFile, winners, &stats, false); err != nil {
+		// The office filter applies here too. The _BR file carries the national
+		// offices (Presidente, Vice), which are in allowedCargos anyway, so
+		// enforcing costs nothing today; skipping enforcement would mean that if
+		// TSE ever ships a _BR file for a municipal year, every elected mayor and
+		// councillor in it would enter the politician base unfiltered.
+		if err := processVotacaoFile(brFile, winners, &stats, true); err != nil {
 			return nil, err
 		}
 		stats.FilesProcessed++

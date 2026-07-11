@@ -1,4 +1,4 @@
-// TODO: LOD — when the graph gets dense:
+// TODO: LOD - when the graph gets dense:
 // - hiding politician/org nodes below a zoom threshold
 // - switching SVG → Canvas renderer for >1000 nodes
 
@@ -30,7 +30,7 @@ const RADII: Record<string, number> = {
   sanction: 9,
 };
 
-// Edge thickness encodes conviction weight — the visual mass tells the story
+// Edge thickness encodes conviction weight - the visual mass tells the story
 // before the user clicks anything
 const EDGE_WIDTH: Record<string, number> = {
   convicted: 2.5,
@@ -191,7 +191,7 @@ interface SimLink extends d3.SimulationLinkDatum<SimNode> {
 // Default view: only scandal nodes.
 // Click a node: reveal its direct neighbours.
 // Click background: collapse back to scandals only.
-// Clicking further nodes accumulates — the visible set grows until collapse.
+// Clicking further nodes accumulates - the visible set grows until collapse.
 
 class ExpandState {
   private visibleIds: Set<string> = new Set();
@@ -313,7 +313,7 @@ export function GraphCanvas() {
   const expandRef = useRef<ExpandState>(new ExpandState());
   const visibleRef = useRef<Set<string>>(new Set());
 
-  // Subscribe to only the slices this component needs — keeps the (expensive)
+  // Subscribe to only the slices this component needs - keeps the (expensive)
   // graph component from re-rendering on unrelated store changes such as the
   // debounced search query or the filter-panel open/close toggle.
   const timelineRange = useAppStore((s) => s.timelineRange);
@@ -352,7 +352,7 @@ export function GraphCanvas() {
     simRef.current?.alpha(0.25).restart();
   }, []);
 
-  // ── Main build effect — runs once per data load ───────────────────────────
+  // ── Main build effect - runs once per data load ───────────────────────────
   useEffect(() => {
     if (!timelineData || !svgRef.current || !containerRef.current) return;
 
@@ -500,7 +500,7 @@ export function GraphCanvas() {
       .attr("clip-path", (d) => `url(#clip-${d.id})`)
       .attr("preserveAspectRatio", "xMidYMid slice");
 
-    // labels — scandals always visible and slightly larger
+    // labels - scandals always visible and slightly larger
     nodeSel
       .append("text")
       .text((d) => d.label)

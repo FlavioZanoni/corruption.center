@@ -429,7 +429,7 @@ func resumeDownload(url, tmp string) (bool, error) {
 
 	switch resp.StatusCode {
 	case http.StatusPartialContent:
-		// Server honoured the Range — append.
+		// Server honoured the Range: append.
 	case http.StatusOK:
 		// No range support (or a fresh start): rewrite from byte zero.
 		have = 0

@@ -22,7 +22,7 @@ export async function searchNodes(
     return data
   }
 
-  // Backend returns a GraphResponse — adapt it to the UI SearchResponse shape.
+  // Backend returns a GraphResponse: adapt it to the UI SearchResponse shape.
   const results = (data.nodes ?? []).map((node) => ({
     id: node.id,
     type: node.type,

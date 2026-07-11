@@ -7,7 +7,7 @@
   --color-surface: #111111;
   --color-border: #222222;
   --color-text: #e8e8e8;
-  --color-text-muted: #999999;   /* minimum body/label text — ~4.5:1 on bg */
+  --color-text-muted: #999999;   /* minimum body/label text: ~4.5:1 on bg */
   --color-text-dim: #666666;     /* decorative only: dividers, placeholders */
   --color-accent-red: #cc2222;
   --color-accent-orange: #cc7722;

@@ -1,19 +1,35 @@
 # TSE Worker
 
-Imports historical federal election winners from TSE bulk ZIP files.
+Imports historical election winners (federal and state-level) from TSE bulk ZIP files.
+Spec: `docs/workerDetails/TSE.md`.
 
 ## What It Does
 
 - Processes yearly `votacao_candidato_munzona_{year}.zip` and `consulta_cand_{year}.zip`.
 - Reads `_BR` and per-UF files, joining on `SQ_CANDIDATO`.
 - Keeps only winners by rule:
-  - `DS_CARGO` in `DEPUTADO FEDERAL`, `SENADOR`, `PRESIDENTE`, `VICE-PRESIDENTE`
+  - `DS_CARGO` in `PRESIDENTE`, `VICE-PRESIDENTE`, `SENADOR`, `DEPUTADO FEDERAL`,
+    `GOVERNADOR`, `VICE-GOVERNADOR`, `DEPUTADO ESTADUAL`, `DEPUTADO DISTRITAL`
+    (`allowedCargos` in `importer.go`; the `_BR` file is not cargo-filtered, it carries
+    Presidente rows only)
   - `DS_SIT_TOT_TURNO` in `ELEITO`, `ELEITO POR QP`, `ELEITO POR MÉDIA`
   - highest `NR_TURNO` per `SQ_CANDIDATO`
 - Produces records with:
   - `active: false`
   - `tse_profile_urls: []string`
   - aliases from `NM_URNA_CANDIDATO` and `NM_SOCIAL_CANDIDATO`
+
+### Why the office list is wide
+
+This base is the ceiling on every later match. A person who is not a `Politician` node
+here can never be tied to a court party or a sanction: they stay an anonymous `Person`
+node and the case never reaches a politician page (see `docs/identity_matching.md`).
+State governors in particular are heavily represented in corruption prosecutions, so the
+filter covers the state executives and legislators as well as the federal offices.
+
+Municipal offices (prefeito, vereador) are elected in the other even-year cycle (2004,
+2008, 2012, …) and are not present in these files. Running `--all-years` over a municipal
+year is harmless: every row is dropped by the cargo filter and the year yields no records.
 
 ## CLI Usage
 
@@ -30,6 +46,17 @@ If you are at repo root, run `cd backend` first.
 By default, ZIP files are downloaded from official TSE URLs and cached under
 `<workdir>/tse-downloads`.
 
+### Downloads: retry with Range resume
+
+The TSE CDN routinely resets these multi-hundred-MB zips mid-transfer, so a single `GET`
+with no retry just died partway through and failed the year. `downloadFileIfMissing` now
+retries up to `downloadRetries` (6) times, and each attempt **resumes** the partial
+`.tmp` with an HTTP `Range: bytes=<have>-` request (`resumeDownload`) instead of starting
+over; a server answering `200` instead of `206` restarts from zero. Backoff between
+attempts is 2s, 4s, 6s, … The `.tmp` is renamed to its final name only after the body was
+copied cleanly, so a cached file is always a complete file. Progress and each interruption
+are logged to stderr.
+
 Range mode (directory with all yearly zip files):
 
 ```bash
@@ -39,13 +66,31 @@ go run ./workers/tse/cmd \
   --zip-dir "/path/to/tse-zips"
 ```
 
-All-years mode:
+All-years mode (every even year from 2002 to the latest election year). `--zip-dir` is
+optional: without it, each year's zips are downloaded (with Range resume) and cached in
+`<workdir>/tse-downloads`.
 
 ```bash
 go run ./workers/tse/cmd \
   --all-years \
   --zip-dir "/path/to/tse-zips"
+
+# Full base, downloading everything, persisted:
+DATABASE_URL="postgres://..." MEMGRAPH_URI="bolt://localhost:7687" \
+go run ./workers/tse/cmd \
+  --all-years \
+  --workdir "$HOME/tmp/tse" \
+  --persist-db
 ```
+
+Municipal years (2004, 2008, …) are walked too and produce zero records: their offices
+(prefeito, vereador) are not in `allowedCargos`. Exactly one mode may be given:
+`--year`, or `--from-year`/`--to-year`, or `--all-years`.
+
+After a full `--all-years` run the politician base is much larger than it was, so the
+`Person` defendants DJEN discovered earlier may now match a politician. Run
+`go run ./workers/djen/cmd --case-mode=false --name-mode=false --rematch-mode` to re-test
+them (`docs/workerDetails/DJEN.md`).
 
 Optional flags:
 
@@ -55,7 +100,7 @@ Optional flags:
 - `--zip-dir` directory mode for range/all
 - `--votacao-zip` and `--consulta-zip` optional overrides for single-year mode
 - `--from-year` / `--to-year` range mode (inclusive)
-- `--all-years` runs every even year from 2002 to 2024
+- `--all-years` runs every even year from 2002 to the latest election year
 - `--persist-db` writes imported records to Postgres/Memgraph
 - `--skip-processed` skips years already marked `success` in `tse_import_log` (default `true`)
 - `--batch-size` Memgraph write batch size (default `500`)
@@ -101,7 +146,7 @@ go run ./workers/tse/cmd \
   --persist-db
 ```
 
-All years from 2002 to 2024 (manual full refresh):
+All years from 2002 to the latest election year (manual full refresh):
 
 ```bash
 DATABASE_URL="postgres://user:pass@localhost:5432/corruption_center?sslmode=disable" \
@@ -141,8 +186,9 @@ Required environment variables in persistence mode:
 
 - `DATABASE_URL`
 - `MEMGRAPH_URI`
-- `MEMGRAPH_USER`
-- `MEMGRAPH_PASS`
+
+`MEMGRAPH_USER` / `MEMGRAPH_PASS` are optional: the dev Memgraph is auth-less and the dev
+compose stack passes empty strings.
 
 ## Tests
 

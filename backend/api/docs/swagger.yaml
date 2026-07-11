@@ -158,6 +158,112 @@ definitions:
       politician:
         $ref: '#/definitions/models.Politician'
     type: object
+  models.ProceedingDefendant:
+    properties:
+      confidence:
+        type: number
+      confidence_signals:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      name:
+        type: string
+      outcome:
+        type: string
+      properties:
+        additionalProperties: {}
+        type: object
+      source:
+        type: string
+      type:
+        type: string
+    type: object
+  models.ProceedingDetailResponse:
+    properties:
+      assuntos:
+        items:
+          type: string
+        type: array
+      case_number:
+        type: string
+      court:
+        type: string
+      defendants:
+        items:
+          $ref: '#/definitions/models.ProceedingDefendant'
+        type: array
+      has_conviction:
+        type: boolean
+      id:
+        type: string
+      phase:
+        type: string
+      scandal:
+        $ref: '#/definitions/models.ProceedingScandalRef'
+      status:
+        $ref: '#/definitions/models.ProceedingStatus'
+      type:
+        $ref: '#/definitions/models.ProceedingType'
+      url:
+        type: string
+    type: object
+  models.ProceedingListItem:
+    properties:
+      case_number:
+        type: string
+      court:
+        type: string
+      has_conviction:
+        type: boolean
+      id:
+        type: string
+      phase:
+        type: string
+      status:
+        $ref: '#/definitions/models.ProceedingStatus'
+      type:
+        $ref: '#/definitions/models.ProceedingType'
+    type: object
+  models.ProceedingListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/models.ProceedingListItem'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  models.ProceedingScandalRef:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  models.ProceedingStatus:
+    enum:
+    - ongoing
+    - concluded
+    type: string
+    x-enum-varnames:
+    - ProceedingStatusOngoing
+    - ProceedingStatusConcluded
+  models.ProceedingType:
+    enum:
+    - criminal
+    - administrative
+    - cpi
+    type: string
+    x-enum-varnames:
+    - ProceedingTypeCriminal
+    - ProceedingTypeAdministrative
+    - ProceedingTypeCPI
   models.Scandal:
     properties:
       aliases:
@@ -182,6 +288,38 @@ definitions:
         type: number
       wikipedia_url:
         type: string
+    type: object
+  models.ScandalListItem:
+    properties:
+      date_end:
+        type: string
+      date_start:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      politician_count:
+        type: integer
+      proceeding_count:
+        type: integer
+      status:
+        $ref: '#/definitions/models.StatusType'
+    type: object
+  models.ScandalListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/models.ScandalListItem'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
     type: object
   models.ScandalProfileResponse:
     properties:
@@ -374,6 +512,61 @@ paths:
       summary: Browse politicians
       tags:
       - politician
+  /proceeding/{id}:
+    get:
+      description: Returns one legal proceeding by node id, with the scandal it investigates
+        and every defendant linked to it (including the DEFENDANT_IN edge's provenance).
+      parameters:
+      - description: Legal proceeding node ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ProceedingDetailResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Legal proceeding detail
+      tags:
+      - proceeding
+  /proceedings:
+    get:
+      description: Paginated list of legal proceedings. Walking every page enumerates
+        the whole corpus, which is what the SEO sitemap does.
+      parameters:
+      - description: Page number (1-based, default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 24, max 100)
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ProceedingListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Browse legal proceedings
+      tags:
+      - proceeding
   /scandal/{id}:
     get:
       description: Returns full scandal profile with all graph connections
@@ -399,6 +592,38 @@ paths:
           schema:
             $ref: '#/definitions/models.ErrorResponse'
       summary: Scandal profile
+      tags:
+      - scandal
+  /scandals:
+    get:
+      description: Paginated list of scandals with involved-politician and linked-proceeding
+        counts. Walking every page enumerates the whole corpus, which is what the
+        SEO sitemap does.
+      parameters:
+      - description: Page number (1-based, default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 24, max 100)
+        in: query
+        name: page_size
+        type: integer
+      - description: 'Sort order: date (default, newest first) or name'
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ScandalListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Browse scandals
       tags:
       - scandal
   /search:

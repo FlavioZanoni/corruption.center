@@ -65,6 +65,33 @@ func TestScore_AutoLinkRequiresADocument(t *testing.T) {
 	}
 }
 
+// The policy is only as good as the gap between its tiers. These bounds exist so
+// that retuning a weight cannot silently move a case across the threshold: the
+// intended auto-link must clear it with room, and the strongest possible
+// name-only evidence must fall well short.
+func TestScore_ThresholdHasMarginOnBothSides(t *testing.T) {
+	maskedPlusName, _ := Score(Evidence{
+		MaskedCPF:   true,
+		SourceName:  "JOAO DA SILVA",
+		SubjectName: "JOAO DA SILVA",
+	})
+	if maskedPlusName < AutoLinkThreshold+0.04 {
+		t.Fatalf("masked CPF + exact name scored %.2f, too close to the threshold %.2f: "+
+			"a small weight change would silently disable masked-CPF auto-linking",
+			maskedPlusName, AutoLinkThreshold)
+	}
+
+	// The best a name can ever do: exact, four tokens, no document.
+	bestNameOnly, _ := Score(Evidence{
+		SourceName:  "JOSE CARLOS DA SILVA SANTOS",
+		SubjectName: "JOSE CARLOS DA SILVA SANTOS",
+	})
+	if bestNameOnly > AutoLinkThreshold-0.4 {
+		t.Fatalf("name-only evidence scored %.2f, uncomfortably close to the threshold %.2f: "+
+			"a name must never be able to identify a person", bestNameOnly, AutoLinkThreshold)
+	}
+}
+
 func TestNormalizeName(t *testing.T) {
 	if got := NormalizeName("  José   da Conceição  "); got != "JOSE DA CONCEICAO" {
 		t.Fatalf("NormalizeName = %q", got)

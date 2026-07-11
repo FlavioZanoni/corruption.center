@@ -67,7 +67,7 @@ RETURN p.id AS id, p.cpf AS cpf, p.name AS name, p.state AS state, p.name_aliase
 }
 
 // SetPoliticianPhotoByCPF sets photo_url/photo_source/photo_attribution on a
-// Politician, but ONLY when photo_url is still empty — so a photo set by the
+// Politician, but ONLY when photo_url is still empty: so a photo set by the
 // camara/senado syncers is never overwritten. Returns whether a row was updated.
 func (db *DB) SetPoliticianPhotoByCPF(ctx context.Context, cpf, photoURL, source, attribution string) (bool, error) {
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})

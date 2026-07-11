@@ -151,7 +151,7 @@ func scandalSelector(scandals []memgraph.ScandalOption, selectedID, compact stri
 	}
 	b := strings.Builder{}
 	b.WriteString(`<select name="scandal_id" class="` + selCls + `">`)
-	b.WriteString(`<option value="">— select a scandal —</option>`)
+	b.WriteString(`<option value="">- select a scandal -</option>`)
 	for _, s := range scandals {
 		label := s.Name
 		if strings.TrimSpace(label) == "" {
@@ -403,7 +403,7 @@ func removalsPage(status string, items []removalRequestView, msg, errMsg string)
 		b.WriteString(`<div class="mb-4 rounded border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">` + template.HTMLEscapeString(errMsg) + `</div>`)
 	}
 	b.WriteString(`<h1 class="text-xl font-semibold">Data removal requests</h1>
-  <p class="mt-2 text-sm text-slate-600">LGPD art. 18 queue. Politicians are public officials (LGPD art. 23) and are never purgeable — a purge against a Politician node is refused in code and must be closed as <em>rejected</em> with a documented justification.</p>`)
+  <p class="mt-2 text-sm text-slate-600">LGPD art. 18 queue. Politicians are public officials (LGPD art. 23) and are never purgeable; a purge against a Politician node is refused in code and must be closed as <em>rejected</em> with a documented justification.</p>`)
 
 	// New-request form.
 	b.WriteString(`<form method="post" action="/backoffice/removals" class="mt-6 grid gap-3 md:grid-cols-2" hx-post="/backoffice/removals" hx-target="body" hx-swap="outerHTML">
@@ -462,7 +462,7 @@ func removalsPage(status string, items []removalRequestView, msg, errMsg string)
 			p := it.Provenance
 			polBadge := ""
 			if p.IsPolitician {
-				polBadge = ` <span class="rounded bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">POLITICIAN — not purgeable (LGPD art. 23)</span>`
+				polBadge = ` <span class="rounded bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">POLITICIAN: not purgeable (LGPD art. 23)</span>`
 			}
 			b.WriteString(`<div class="mt-2 rounded bg-slate-50 px-3 py-2 text-xs">
         <div><span class="font-semibold">` + template.HTMLEscapeString(p.Label) + `</span> ` + template.HTMLEscapeString(p.Name) + polBadge + `</div>

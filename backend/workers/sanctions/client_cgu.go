@@ -352,7 +352,7 @@ func mapLeniencia(d lenienciaDTO) []SanctionRecord {
 		// Sanction.id merges on registry+EntryID, so the discriminator after the
 		// agreement id must be distinct per company. Prefer the CNPJ; when the
 		// company has no document, fall back to a stable name slug, then to the
-		// company's index within the agreement — otherwise several document-less
+		// company's index within the agreement: otherwise several document-less
 		// companies in one agreement would all collide on "<id>-" and merge into
 		// a single Sanction node with wrong entity attribution.
 		key := rec.CNPJ

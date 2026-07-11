@@ -1,6 +1,6 @@
 // 002_sanction.cypher
 //
-// Sanction node — official Brazilian punishment registries (CGU CEIS/CNEP/CEAF/
+// Sanction node: official Brazilian punishment registries (CGU CEIS/CNEP/CEAF/
 // leniency + TCU irregular/inabilitado/inidôneo). id = registry + ":" + entry id.
 // Written by the Sanctions Sync worker; linked to Politician/Person/Organization
 // via SANCTIONED_IN edges.

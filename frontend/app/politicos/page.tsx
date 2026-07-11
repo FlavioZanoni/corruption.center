@@ -163,7 +163,7 @@ export default function PoliticiansBrowsePage() {
           <div>
             <h1 className="text-2xl font-serif font-semibold text-white">Políticos</h1>
             <p className="text-xs font-mono text-text-muted mt-1">
-              Explore os políticos monitorados — mesmo antes de qualquer escândalo mapeado.
+              Explore os políticos monitorados: mesmo antes de qualquer escândalo mapeado.
             </p>
           </div>
           <Link
@@ -223,7 +223,7 @@ export default function PoliticiansBrowsePage() {
             className="bg-surface border border-border rounded-sm px-3 py-2 text-sm font-mono text-text focus:outline-none focus:border-[#c8a96e]/60"
           >
             <option value="connections">Mais conexões</option>
-            <option value="name">Nome (A–Z)</option>
+            <option value="name">Nome (A-Z)</option>
           </select>
         </div>
 

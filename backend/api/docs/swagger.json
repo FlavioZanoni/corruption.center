@@ -262,6 +262,87 @@
                 }
             }
         },
+        "/proceeding/{id}": {
+            "get": {
+                "description": "Returns one legal proceeding by node id, with the scandal it investigates and every defendant linked to it (including the DEFENDANT_IN edge's provenance).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "proceeding"
+                ],
+                "summary": "Legal proceeding detail",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Legal proceeding node ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ProceedingDetailResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/proceedings": {
+            "get": {
+                "description": "Paginated list of legal proceedings. Walking every page enumerates the whole corpus, which is what the SEO sitemap does.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "proceeding"
+                ],
+                "summary": "Browse legal proceedings",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number (1-based, default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 24, max 100)",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ProceedingListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/scandal/{id}": {
             "get": {
                 "description": "Returns full scandal profile with all graph connections",
@@ -292,6 +373,52 @@
                         "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/scandals": {
+            "get": {
+                "description": "Paginated list of scandals with involved-politician and linked-proceeding counts. Walking every page enumerates the whole corpus, which is what the SEO sitemap does.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "scandal"
+                ],
+                "summary": "Browse scandals",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number (1-based, default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 24, max 100)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort order: date (default, newest first) or name",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ScandalListResponse"
                         }
                     },
                     "500": {
@@ -625,6 +752,164 @@
                 }
             }
         },
+        "models.ProceedingDefendant": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number"
+                },
+                "confidence_signals": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "outcome": {
+                    "type": "string"
+                },
+                "properties": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "source": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ProceedingDetailResponse": {
+            "type": "object",
+            "properties": {
+                "assuntos": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "case_number": {
+                    "type": "string"
+                },
+                "court": {
+                    "type": "string"
+                },
+                "defendants": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ProceedingDefendant"
+                    }
+                },
+                "has_conviction": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "phase": {
+                    "type": "string"
+                },
+                "scandal": {
+                    "$ref": "#/definitions/models.ProceedingScandalRef"
+                },
+                "status": {
+                    "$ref": "#/definitions/models.ProceedingStatus"
+                },
+                "type": {
+                    "$ref": "#/definitions/models.ProceedingType"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ProceedingListItem": {
+            "type": "object",
+            "properties": {
+                "case_number": {
+                    "type": "string"
+                },
+                "court": {
+                    "type": "string"
+                },
+                "has_conviction": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "phase": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/models.ProceedingStatus"
+                },
+                "type": {
+                    "$ref": "#/definitions/models.ProceedingType"
+                }
+            }
+        },
+        "models.ProceedingListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ProceedingListItem"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ProceedingScandalRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ProceedingStatus": {
+            "type": "string",
+            "enum": [
+                "ongoing",
+                "concluded"
+            ],
+            "x-enum-varnames": [
+                "ProceedingStatusOngoing",
+                "ProceedingStatusConcluded"
+            ]
+        },
+        "models.ProceedingType": {
+            "type": "string",
+            "enum": [
+                "criminal",
+                "administrative",
+                "cpi"
+            ],
+            "x-enum-varnames": [
+                "ProceedingTypeCriminal",
+                "ProceedingTypeAdministrative",
+                "ProceedingTypeCPI"
+            ]
+        },
         "models.Scandal": {
             "type": "object",
             "properties": {
@@ -662,6 +947,55 @@
                 },
                 "wikipedia_url": {
                     "type": "string"
+                }
+            }
+        },
+        "models.ScandalListItem": {
+            "type": "object",
+            "properties": {
+                "date_end": {
+                    "type": "string"
+                },
+                "date_start": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "politician_count": {
+                    "type": "integer"
+                },
+                "proceeding_count": {
+                    "type": "integer"
+                },
+                "status": {
+                    "$ref": "#/definitions/models.StatusType"
+                }
+            }
+        },
+        "models.ScandalListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ScandalListItem"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },

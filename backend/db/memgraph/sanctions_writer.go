@@ -22,7 +22,9 @@ type SanctionUpsert struct {
 }
 
 // PoliticianMatch is a Politician node candidate returned by masked-CPF or
-// name matching. Never linked automatically — always routed through review.
+// name matching. A candidate is linked automatically only when the evidence
+// reaches document grade (masked CPF plus an exact name); a name-only match is
+// always routed through review. See package matching and docs/identity_matching.md.
 type PoliticianMatch struct {
 	ID   string
 	Name string
@@ -34,7 +36,7 @@ func SanctionNodeID(registry, entryID string) string {
 }
 
 // UpsertSanction merges a Sanction node by its deterministic id. source_url is a
-// hard requirement (legal compliance) — every node must deep-link the record.
+// hard requirement (legal compliance): every node must deep-link the record.
 func (db *DB) UpsertSanction(ctx context.Context, s SanctionUpsert) (string, error) {
 	if strings.TrimSpace(s.SourceURL) == "" {
 		return "", fmt.Errorf("memgraph: sanction %s:%s missing source_url", s.Registry, s.EntryID)

@@ -11,6 +11,7 @@ type Handlers struct {
 	Timeline   *TimelineHandler
 	Politician *PoliticianHandler
 	Scandal    *ScandalHandler
+	Proceeding *ProceedingHandler
 }
 
 func NewHandlers(graph services.GraphService, search services.SearchService) *Handlers {
@@ -21,5 +22,6 @@ func NewHandlers(graph services.GraphService, search services.SearchService) *Ha
 		Timeline:   NewTimelineHandler(graph),
 		Politician: NewPoliticianHandler(graph),
 		Scandal:    NewScandalHandler(graph),
+		Proceeding: NewProceedingHandler(graph),
 	}
 }

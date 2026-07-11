@@ -25,7 +25,7 @@ const (
 )
 
 // Destinatario is a single party of a communication. polo is "A" (ativo /
-// plaintiff side) or "P" (passivo / defendant side). Names only — no document.
+// plaintiff side) or "P" (passivo / defendant side). Names only: no document.
 type Destinatario struct {
 	Nome          string `json:"nome"`
 	Polo          string `json:"polo"`

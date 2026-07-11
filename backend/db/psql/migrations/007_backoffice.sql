@@ -3,7 +3,7 @@
 -- surfaces these, lets an operator resolve them (including a one-click purge of
 -- the targeted Person node), and every resolution is mirrored into audit_log.
 --
--- Politicians are public officials (LGPD art. 23) and are never purgeable — the
+-- Politicians are public officials (LGPD art. 23) and are never purgeable: the
 -- purge path refuses them in code; a request against a politician is resolved
 -- with a 'rejected' status and a documented justification.
 

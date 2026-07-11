@@ -2,7 +2,7 @@
 // photo, and Organizations with a Wikidata/Wikimedia Commons presence should
 // carry their Commons P18 image (never the P154 logo, for legal reasons).
 //
-// The worker stores NO image bytes locally — photo_url always hotlinks to an
+// The worker stores NO image bytes locally: photo_url always hotlinks to an
 // official server (TSE divulgacandcontas or Wikimedia Commons Special:FilePath).
 //
 // Two modes:

@@ -56,7 +56,7 @@ func (db *DB) QueryPoliticians(ctx context.Context, filter, party, uf, sort stri
 		return nil, fmt.Errorf("memgraph: count politicians rows: %w", err)
 	}
 
-	// ORDER BY cannot be parameterized — allowlist the sort modes and inline
+	// ORDER BY cannot be parameterized: allowlist the sort modes and inline
 	// the clause. "connections" = total relationship degree, so the most
 	// linked politicians surface first.
 	orderBy := "connection_count DESC, p.name"

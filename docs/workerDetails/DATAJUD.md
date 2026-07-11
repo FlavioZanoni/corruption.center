@@ -1,4 +1,4 @@
-# DataJud Watcher - Deep Dive
+# DataJud Watcher: Deep Dive
 
 ## Purpose
 
@@ -18,10 +18,10 @@ dataHoraUltimaAtualizacao
 
 Per Portaria CNJ 160/2020 the public API **never returns**:
 
-- `partes[]` — no party names, no CPF/CNPJ. Defendant discovery via DataJud
+- `partes[]` - no party names, no CPF/CNPJ. Defendant discovery via DataJud
   is impossible.
-- `processoRelacionado[]` — no automatic case-tree expansion.
-- Free-text movement `complemento` — movements carry coded
+- `processoRelacionado[]` - no automatic case-tree expansion.
+- Free-text movement `complemento` - movements carry coded
   `complementosTabelados` only, so extracting spinoff case numbers from
   Desmembramento movements does not work.
 
@@ -59,7 +59,7 @@ Content-Type: application/json
 ```
 
 `DATAJUD_API_KEY` comes from the environment. The public key is published at
-`https://datajud-wiki.cnj.jus.br/api-publica/acesso/` and rotates — never
+`https://datajud-wiki.cnj.jus.br/api-publica/acesso/` and rotates; never
 hardcode it in code or docs.
 
 Query by case number:
@@ -100,10 +100,10 @@ evidence.
 
 ## Tribunals
 
-All 90+ tribunals are exposed as `api_publica_<sigla>` — federal (STF*, STJ,
+All 90+ tribunals are exposed as `api_publica_<sigla>`: federal (STF*, STJ,
 TRF1-6) and state (`api_publica_tjpr`, `api_publica_tjsp`, ...). State-court
 cases (mayors, state deputies) use TJ endpoints; there is no need to touch
 Projudi/e-SAJ/eproc front-ends directly.
 
-*`api_publica_stf` has returned 404 in live probing — STF availability is not
+*`api_publica_stf` has returned 404 in live probing; STF availability is not
 guaranteed; prefer STJ/TRF probes for verification.

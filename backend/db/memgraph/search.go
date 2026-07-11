@@ -27,7 +27,7 @@ func (db *DB) QuerySearch(ctx context.Context, q string, nodeType string) (*mode
 	case "sanction":
 		result, err = searchSanctions(ctx, session, q)
 	default:
-		// no type filter — search all
+		// no type filter: search all
 		result, err = searchAll(ctx, session, q)
 	}
 

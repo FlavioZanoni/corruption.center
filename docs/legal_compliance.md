@@ -16,11 +16,11 @@ A visible contact page or footer link on the site with:
 
 This is the most important legal protection. It must clearly explain:
 
-1. **What the project is** — a transparency tool built exclusively from official Brazilian public records for public interest accountability purposes (LGPD art. 23)
-2. **Where every data type comes from** — list each source (Câmara, Senado, TSE, DataJud/CNJ, DJEN/CNJ, Portal da Transparência/CGU, TCU, Receita Federal via CNPJ.ws) with links — all official government open-data services; the project never scrapes court front-ends or third-party aggregators
-3. **What "pending confirmation" means** — explain that links between private individuals and politicians are never created automatically, always require human review before being displayed
-4. **How to request removal** — direct link to contact, explain the process
-5. **Limitations disclaimer** — data reflects official records and may contain errors from the source; the project does not add or infer information beyond what official records state
+1. **What the project is**: a transparency tool built exclusively from official Brazilian public records for public interest accountability purposes (LGPD art. 23)
+2. **Where every data type comes from**: list each source (Câmara, Senado, TSE, DataJud/CNJ, DJEN/CNJ, Portal da Transparência/CGU, TCU, Receita Federal via CNPJ.ws) with links; all official government open-data services. The project never scrapes court front-ends or third-party aggregators
+3. **How a person is identified**: explain that a link is only created automatically when the official source published a document that identifies the person (a full CPF/CNPJ, or CGU's masked CPF together with an exact name). A match on a name alone is never enough to create a link: it goes to human review. Every displayed link states how it was established, either "confirmado por revisão humana" or "identificação: N%" with the evidence behind it. See [identity_matching.md](identity_matching.md) for the policy and `/metodologia` section 03 for the public wording
+4. **How to request removal**: direct link to contact, explain the process
+5. **Limitations disclaimer**: data reflects official records and may contain errors from the source; the project does not add or infer information beyond what official records state
 
 ---
 
@@ -46,7 +46,7 @@ This is a notification, not a request for approval. You are not waiting for a re
 - A dedicated queue for incoming removal requests (email or form)
 - For each request: record requester identity, date received, node/edge targeted, resolution, date resolved
 - Ability to soft-delete or fully purge a `Person` node and all its edges with a full audit trail in Postgres
-- Politicians cannot be removed — they are public officials and LGPD art. 23 applies; document this policy explicitly in the backoffice
+- Politicians cannot be removed; they are public officials and LGPD art. 23 applies. Document this policy explicitly in the backoffice
 
 ### Person node controls
 
@@ -56,14 +56,33 @@ This is a notification, not a request for approval. You are not waiting for a re
 
 ### Pending review discipline
 
-- `possible_politician_in_qsa` items in `pending_review` must never auto-approve - always require explicit human action
-- Rejected items must be recorded with reason so the same false match is not re-flagged by the watcher on the next run
-- Display a clear "unconfirmed — pending review" label on any node or edge that has not yet been confirmed by a human
+The gate is on **claims about a person**, not on records. Registering a court case
+for watching asserts nothing about anybody (it creates a `LegalProceeding` and a
+`watcher_tracking` row so the case is polled) and is therefore automatic. The
+assertion "this politician is a defendant in this case" is a claim, and the rules
+below govern it. Full policy: [identity_matching.md](identity_matching.md).
+
+- A name-only match must **never** auto-approve. `djen_party_match`,
+  `possible_politician_in_qsa` and any sanction match that did not reach document
+  grade require explicit human action. DJEN publishes party names with no document
+  at all, and homonyms are abundant: a single search for a common name returns
+  thousands of publications belonging to different people. Publishing "Deputy X is
+  a defendant" when it is a different X is defamation no matter how good the source
+  link is
+- A link **may** be created automatically only when the source itself identifies
+  the person: a full CPF/CNPJ, or CGU's masked CPF plus an exact name (scored at or
+  above `matching.AutoLinkThreshold`). Every such edge stores its `confidence` and
+  the `confidence_signals` behind it, so the link can be explained afterwards
+- Rejected items must be recorded with reason so the same false match is not
+  re-flagged by the watcher on the next run
+- Display a clear "unconfirmed; pending review" label on any node or edge that has
+  not yet been confirmed by a human, and show the provenance of every displayed
+  link (human-confirmed, or auto-identified with its score and evidence)
 
 ### Audit log visibility
 
 - The backoffice must surface who created or modified each node/edge and when
-- This is both an internal quality tool and LGPD compliance — if someone requests to know why their data is in the system, you can answer precisely
+- This is both an internal quality tool and LGPD compliance; if someone requests to know why their data is in the system, you can answer precisely
 
 ---
 
@@ -71,9 +90,9 @@ This is a notification, not a request for approval. You are not waiting for a re
 
 | Actor | Can act immediately? | Likely trigger | Mitigation |
 | --- | --- | --- | --- |
-| CNJ | Yes — API revocation, no warning needed | Abuse of rate limit or commercial use | Stay within 120 req/min, keep project non-commercial |
+| CNJ | Yes: API revocation, no warning needed | Abuse of rate limit or commercial use | Stay within 120 req/min, keep project non-commercial |
 | ANPD | Unlikely without prior notificação | Serious ongoing LGPD violation | Public interest framing, removal request process |
-| Civil court (injunction) | Yes — tutela de urgência can be granted in hours | Politician claims defamation | Methodology page, "sourced from official records" disclaimer on every node, pending confirmation labels |
-| Criminal | Unlikely for this type of project | — | — |
+| Civil court (injunction) | Yes: tutela de urgência can be granted in hours | Politician claims defamation | Methodology page, "sourced from official records" disclaimer on every node, pending confirmation labels |
+| Criminal | Unlikely for this type of project | - | - |
 
 The methodology page and the "sourced from official records" label on every displayed fact are the primary defenses against a defamation injunction. A judge seeing that every claim links back to a DataJud case number or a Câmara API record is far less likely to grant emergency relief.

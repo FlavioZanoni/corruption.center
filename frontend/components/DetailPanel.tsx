@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import {
   X,
   ExternalLink,
@@ -11,12 +12,14 @@ import {
   Scale,
   FileText,
   Ban,
+  ArrowUpRight,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
 import { fetchExpandGraph } from "@/lib/api/graph";
 import type { GraphNode, GraphEdge } from "@/lib/types";
 import { NODE_COLORS } from "@/lib/constants";
+import { ProvenanceBadge, ReviewBadge } from "@/components/ProvenanceBadge";
 import { porExtenso, estilo } from "numero-por-extenso";
 
 function NodeIcon({
@@ -43,19 +46,6 @@ function NodeIcon({
     case "sanction":
       return <Ban {...props} className="text-[#d98a4b]" />;
   }
-}
-
-// Legally required label for any node/edge not yet confirmed by a human
-// (see docs/legal_compliance.md — "unconfirmed — pending review" discipline).
-function ReviewBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm border border-[#ccaa22]/40 bg-[#ccaa22]/10">
-      <AlertTriangle size={9} strokeWidth={1.5} className="text-[#ccaa22] shrink-0" />
-      <span className="text-[8px] font-mono uppercase tracking-wider text-[#ccaa22] leading-none">
-        não confirmado — pendente de revisão
-      </span>
-    </span>
-  );
 }
 
 // A node is treated as unconfirmed when it carries machine-ingest provenance
@@ -154,7 +144,7 @@ function formatDate(raw: string): string {
   // Accept YYYY-MM-DD or YYYY-MM or YYYY
   const d = new Date(raw.length === 4 ? `${raw}-01-01` : raw.length === 7 ? `${raw}-01` : raw);
   if (isNaN(d.getTime())) return raw;
-  if (raw.length === 4) return raw; // bare year — no need to expand
+  if (raw.length === 4) return raw; // bare year - no need to expand
   return DATE_FORMATTER.format(d);
 }
 
@@ -222,56 +212,6 @@ function edgeStatusColor(properties: Record<string, unknown>): string {
     default:
       return "#999999";
   }
-}
-
-// How a link between a person and a case/sanction came to exist. Official
-// sources publish names, and often mask documents, so tying a record to a
-// specific politician is an inference — the reader is told which one it was and
-// how strong the evidence behind it is (backend: package matching).
-const CONFIDENCE_SIGNAL_LABELS: Record<string, string> = {
-  full_document: "CPF/CNPJ completo na fonte",
-  masked_cpf_middle6: "CPF parcial da fonte confere",
-  exact_name: "nome idêntico",
-  long_name: "nome completo (4+ partes)",
-  ambiguous_match: "evidência serve a mais de uma pessoa",
-};
-
-function ProvenanceBadge({ properties }: { properties: Record<string, unknown> }) {
-  const source = properties.source as string | undefined;
-  if (source === "backoffice_review") {
-    return (
-      <span
-        className="mt-1.5 inline-block text-[9px] font-mono uppercase tracking-wider text-[#7aa87a]"
-        title="Vínculo criado por revisão humana a partir de registro oficial."
-      >
-        ✓ Confirmado por revisão humana
-      </span>
-    );
-  }
-
-  const confidence = properties.confidence as number | undefined;
-  if (typeof confidence !== "number") return null;
-
-  const signals = Array.isArray(properties.confidence_signals)
-    ? (properties.confidence_signals as string[])
-    : [];
-  const reasons = signals
-    .map((s) => CONFIDENCE_SIGNAL_LABELS[s] ?? s)
-    .join(" · ");
-
-  return (
-    <span
-      className="mt-1.5 inline-block text-[9px] font-mono uppercase tracking-wider text-text-muted"
-      title={
-        reasons
-          ? `Identificação automática. Evidência: ${reasons}.`
-          : "Identificação automática a partir de registro oficial."
-      }
-    >
-      Identificação: {Math.round(confidence * 100)}%
-      {reasons ? ` · ${reasons}` : ""}
-    </span>
-  );
 }
 
 function PropRow({
@@ -374,7 +314,7 @@ function ConnectedNodeItem({
 }
 
 // Dedicated rendering for a Sanction connection: registry, type, sanctioning
-// organ, effective period and — crucially — the official source_url deep link
+// organ, effective period and - crucially - the official source_url deep link
 // plus the pending-review provenance label required for compliance.
 function SanctionItem({ node }: { node: GraphNode }) {
   const p = node.properties;
@@ -387,7 +327,7 @@ function SanctionItem({ node }: { node: GraphNode }) {
   const period = [dateStart, dateEnd]
     .filter((d): d is string => Boolean(d))
     .map((d) => formatDate(d))
-    .join(" — ");
+    .join(" - ");
 
   return (
     <div className="px-4 py-3 border-b border-[#1a1a1a]">
@@ -505,6 +445,17 @@ export function DetailPanel() {
 
   const ringColor = NODE_COLORS[node?.type ?? ""] ?? "#555555";
 
+  // Politicians and scandals have a permanent, server-rendered page of their
+  // own: the panel is a preview, that page is the citable record.
+  const entityHref =
+    node?.type === "politician"
+      ? `/politico/${encodeURIComponent(node.id)}`
+      : node?.type === "scandal"
+        ? `/escandalo/${encodeURIComponent(node.id)}`
+        : null;
+  const entityLinkLabel =
+    node?.type === "politician" ? "Página do político" : "Ver página completa";
+
   return (
     <>
       <div
@@ -570,6 +521,15 @@ export function DetailPanel() {
                   <div className="text-[10px] font-mono text-text-muted mt-1">
                     {node.id}
                   </div>
+                  {entityHref && (
+                    <Link
+                      href={entityHref}
+                      className="mt-2 inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-text-muted hover:text-white transition-colors"
+                    >
+                      <ArrowUpRight size={11} strokeWidth={1.5} className="shrink-0" />
+                      {entityLinkLabel}
+                    </Link>
+                  )}
                   {unconfirmed && (
                     <div className="mt-2">
                       <ReviewBadge />

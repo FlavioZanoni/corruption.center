@@ -89,7 +89,7 @@ export interface OrganizationProperties {
 
 // Sanction node: an official registry entry (CEIS, CNEP, CEPIM, TCU
 // inelegibility, etc.) that a Politician/Person/Organization is SANCTIONED_IN.
-// source_url is mandatory — every sanction deep-links its authoritative record.
+// source_url is mandatory: every sanction deep-links its authoritative record.
 export interface SanctionProperties {
   registry?: string
   sanction_type?: string

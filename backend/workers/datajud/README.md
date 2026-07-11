@@ -3,7 +3,7 @@
 A **case-level status engine**. It keeps tracked `LegalProceeding` nodes up to
 date by polling the DataJud public API by `numeroProcesso` and applying a
 movement-driven state machine. It does **not** discover parties or expand case
-trees — the public API does not expose that data (Portaria CNJ 160/2020). Party
+trees - the public API does not expose that data (Portaria CNJ 160/2020). Party
 discovery and per-defendant outcomes belong to the DJEN worker and human review.
 
 See the authoritative spec: [`docs/workerDetails/DATAJUD.md`](../../../docs/workerDetails/DATAJUD.md).
@@ -33,7 +33,7 @@ defendant from DataJud alone.
 
 `has_conviction` is **order-sensitive, not latched**. Movements are evaluated in
 chronological order (by `dataHora`, falling back to input order when timestamps
-are missing or equal) and the **last** explicit `60`/`61` disposition wins — so a
+are missing or equal) and the **last** explicit `60`/`61` disposition wins - so a
 Condenação later reversed on appeal (a subsequent Absolvição) *clears*
 `has_conviction` instead of leaving a stale, defamation-grade `true`. An explicit
 `60`/`61` always outranks an `848` complement inference regardless of order. The
@@ -105,5 +105,4 @@ This keeps Postgres tracking from desynchronizing from the graph on dry runs.
 
 ## Live verification notes
 
-- TRF/STJ endpoints respond; `api_publica_stf` returned 404 in live probing —
-  prefer STJ/TRF for probes.
+- TRF/STJ endpoints respond; `api_publica_stf` returned 404 in live probing: prefer STJ/TRF for probes.

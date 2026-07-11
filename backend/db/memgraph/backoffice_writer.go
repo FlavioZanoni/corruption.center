@@ -17,7 +17,7 @@ import (
 var ErrPoliticianNotPurgeable = errors.New(
 	"refusing to purge a Politician node: politicians are public officials and, " +
 		"under LGPD art. 23, the processing of their data for public-interest " +
-		"accountability is lawful — they cannot be removed from the transparency graph")
+		"accountability is lawful; they cannot be removed from the transparency graph")
 
 // ErrNodeNotPurgeable is returned by PurgePersonNode when the targeted node is
 // neither a Person nor an Organization. Only those two labels carry personal /
@@ -27,7 +27,7 @@ var ErrPoliticianNotPurgeable = errors.New(
 // surfaced verbatim in the backoffice so the operator understands the refusal.
 var ErrNodeNotPurgeable = errors.New(
 	"refusing to purge this node: only Person and Organization nodes are " +
-		"purgeable via the removal-request flow — Scandal, LegalProceeding, " +
+		"purgeable via the removal-request flow. Scandal, LegalProceeding, " +
 		"Sanction and Source nodes are transparency records and cannot be removed")
 
 // ScandalOption is a minimal Scandal projection (id + name) used to populate the
@@ -57,8 +57,8 @@ ON CREATE SET s.name = $name, s.date_start = $date_start
 }
 
 // ScandalSeed is a fully-described Scandal written by the baseline seed
-// (api/seed.go). Unlike UpsertScandal — which only fills in a node a case
-// registration referenced — the seed owns these properties and rewrites them on
+// (api/seed.go). Unlike UpsertScandal, which only fills in a node a case
+// registration referenced, the seed owns these properties and rewrites them on
 // every boot, so correcting a description in code corrects it in the graph.
 type ScandalSeed struct {
 	ID           string
@@ -141,8 +141,8 @@ type NodeProvenance struct {
 	Name           string
 	IsPolitician   bool
 	Purgeable      bool   // true only for Person/Organization non-Politician nodes
-	CPF            string // n.cpf (11 digits) when present — for purge tombstones
-	CNPJ           string // n.cnpj (14 digits) when present — for purge tombstones
+	CPF            string // n.cpf (11 digits) when present - for purge tombstones
+	CNPJ           string // n.cnpj (14 digits) when present - for purge tombstones
 	Source         string // provenance_source, e.g. "djen"
 	ComunicacaoID  string // provenance_comunicacao_id
 	Link           string // provenance_link (official source URL)
@@ -206,7 +206,7 @@ RETURN labels(n) AS labels,
 // (DETACH DELETE), leaving no orphaned edges. It refuses Politician nodes,
 // returning ErrPoliticianNotPurgeable. The caller is responsible for writing the
 // audit_log deletion record with the returned metadata (label, name, edge
-// count) — that record is what satisfies the LGPD "why was my data here" duty.
+// count): that record is what satisfies the LGPD "why was my data here" duty.
 //
 // It returns the node's provenance (as it was before deletion) so the audit
 // record can capture the creation reason of what was removed.
@@ -268,7 +268,7 @@ func primaryLabel(labels []string) (string, bool) {
 }
 
 // hasPurgeableLabel reports whether the node carries a Person or Organization
-// label — the only two labels the removal-request purge is allowed to delete.
+// label: the only two labels the removal-request purge is allowed to delete.
 func hasPurgeableLabel(labels []string) bool {
 	for _, l := range labels {
 		if strings.EqualFold(l, "Person") || strings.EqualFold(l, "Organization") {
@@ -282,7 +282,7 @@ func hasPurgeableLabel(labels []string) bool {
 // These are the writes the backoffice performs when an operator APPROVES a
 // pending_review that proposed a link between a Politician and another node.
 // Per the review-queue contract (docs/legal_compliance.md), such links are
-// never auto-created by the workers — they only exist once a human confirms
+// never auto-created by the workers: they only exist once a human confirms
 // them here. Each MERGE is idempotent, and every writer RETURNs a row so a
 // missing Politician / target id surfaces as a visible error rather than a
 // silent no-op (MATCH failing would otherwise skip the MERGE quietly).

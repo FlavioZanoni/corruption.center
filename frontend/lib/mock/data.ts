@@ -231,9 +231,9 @@ export const MOCK_GRAPH: GraphResponse = {
     {
       id: "scan-cabral-rio",
       type: "scandal",
-      label: "Esquema Cabral — Rio",
+      label: "Esquema Cabral - Rio",
       properties: {
-        name: "Esquema Cabral — Rio",
+        name: "Esquema Cabral - Rio",
         description:
           "Esquema de corrupção sistêmica no governo do estado do Rio de Janeiro envolvendo propinas em contratos de saúde e obras.",
         date_start: "2007-01-01",
@@ -313,7 +313,7 @@ export const MOCK_GRAPH: GraphResponse = {
     {
       id: "leg-ap470",
       type: "legal_proceeding",
-      label: "AP 470 — Mensalão",
+      label: "AP 470 - Mensalão",
       properties: {
         case_number: "AP 470",
         court: "STF",
@@ -355,7 +355,7 @@ export const MOCK_GRAPH: GraphResponse = {
     {
       id: "leg-cunha-cpc",
       type: "legal_proceeding",
-      label: "Ação Penal — Eduardo Cunha",
+      label: "Ação Penal - Eduardo Cunha",
       properties: {
         case_number: "AP 863",
         court: "STF",

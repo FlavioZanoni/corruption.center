@@ -5,10 +5,10 @@
 -- ─── Extend pending_review type allowlist ─────────────────────────────────────
 -- The original CHECK constraint (001_init.sql) only knew about the DataJud
 -- review types. DJEN adds two more:
---   * djen_party_match   — a case party name exactly matches a Politician; a
+--   * djen_party_match   - a case party name exactly matches a Politician; a
 --                          human must confirm the identity before any edge is
 --                          created (names carry no CPF, homonyms are common).
---   * djen_case_candidate — name-mode discovered a case number not yet tracked
+--   * djen_case_candidate - name-mode discovered a case number not yet tracked
 --                          that looks criminal/improbidade; approval registers
 --                          it in watcher_tracking.
 

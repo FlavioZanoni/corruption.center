@@ -5,7 +5,7 @@
 // happened but often silent about *who* it happened to. DJEN publishes party
 // names with no document at all; CGU masks CPFs to their six middle digits. So
 // linking "a person named X" to "our politician X" is an inference we make, not
-// a fact the source states — and a wrong inference publishes a false accusation
+// a fact the source states, and a wrong inference publishes a false accusation
 // about a named individual, which no amount of source-linking cures.
 //
 // The score turns that inference into an explicit, auditable number. A link is
@@ -21,7 +21,14 @@ import (
 // AutoLinkThreshold is the score at or above which a link may be created without
 // human review. It is calibrated so that a document signal is required: no
 // combination of name-only evidence can reach it.
-const AutoLinkThreshold = 0.90
+//
+// It sits at 0.85, not 0.90, so the intended auto-link case (masked CPF 0.60 +
+// exact name 0.30 = 0.90) clears it with margin instead of landing exactly on it.
+// At 0.90 the policy balanced on a knife edge: shaving a hundredth off the name
+// weight would have silently switched off every masked-CPF auto-link, with no
+// test failing. The gap to the strongest name-only evidence (0.35) is what
+// actually matters, and it stays wide.
+const AutoLinkThreshold = 0.85
 
 // Signal names recorded on the edge, so any link can be explained after the fact.
 const (
@@ -55,7 +62,7 @@ type Evidence struct {
 //	masked CPF alone, name differs                            = 0.60 → review
 //	exact name alone, no document                             = 0.30 → review
 //
-// A name, however exact, can never reach the threshold by itself — homonyms are
+// A name, however exact, can never reach the threshold by itself; homonyms are
 // abundant (DJEN returns thousands of distinct people for a single common name),
 // so a name-only match is a lead, not an identification.
 func Score(e Evidence) (float64, []string) {

@@ -1,6 +1,6 @@
 // ─── Shared node colours ──────────────────────────────────────────────────────
 // Used by GraphCanvas (graph rendering) and DetailPanel (ring / icon colours).
-// Keep these in sync — they are the single source of truth.
+// Keep these in sync: they are the single source of truth.
 
 export const NODE_COLORS: Record<string, string> = {
   politician: "#c8a96e",

@@ -1,6 +1,6 @@
-// Package sanctions ingests official Brazilian punishment registries — CGU
+// Package sanctions ingests official Brazilian punishment registries: CGU
 // Portal da Transparência (CEIS, CNEP, CEAF, leniency agreements) and TCU
-// (irregular accounts, inabilitados, inidôneos) — into the graph as Sanction
+// (irregular accounts, inabilitados, inidôneos) into the graph as Sanction
 // nodes with deterministic CPF/CNPJ-keyed SANCTIONED_IN edges.
 package sanctions
 
@@ -249,7 +249,7 @@ func (w *Worker) apply(ctx context.Context, rec SanctionRecord, stats *Stats) er
 	}
 }
 
-// linkCNPJ: deterministic — ensure Organization (create bare for the enricher)
+// linkCNPJ: deterministic - ensure Organization (create bare for the enricher)
 // and link. No review.
 func (w *Worker) linkCNPJ(ctx context.Context, rec SanctionRecord, sanctionID string, stats *Stats) error {
 	// LGPD resurrection guard: if this CNPJ was purged, do not re-create the
@@ -278,11 +278,11 @@ func (w *Worker) linkCNPJ(ctx context.Context, rec SanctionRecord, sanctionID st
 	return nil
 }
 
-// linkFullCPF: deterministic — match existing Politician/Person, else create a
+// linkFullCPF: deterministic - match existing Politician/Person, else create a
 // Person keyed by the full CPF. No review.
 func (w *Worker) linkFullCPF(ctx context.Context, rec SanctionRecord, sanctionID string, stats *Stats) error {
 	// LGPD resurrection guard: if this CPF (or its purged name) was tombstoned,
-	// skip entirely — neither link to a possibly-recreated node nor auto-create a
+	// skip entirely - neither link to a possibly-recreated node nor auto-create a
 	// new Person via UpsertPersonByCPF.
 	purged, err := w.pg.IsSubjectPurged(ctx, psql.TombstoneKeyCPF(rec.CPF), psql.TombstoneKeyName(rec.Name))
 	if err != nil {
@@ -322,8 +322,8 @@ func (w *Worker) linkFullCPF(ctx context.Context, rec SanctionRecord, sanctionID
 
 // linkMaskedCPF: CGU masks CPFs on the person registries (***.435.151-**), so the
 // six visible middle digits are compared against the full CPF we hold from TSE.
-// That alone is not an identification — several people share any six middle
-// digits — so the link is scored (see package matching): six digits AND an exact
+// That alone is not an identification - several people share any six middle
+// digits: so the link is scored (see package matching): six digits AND an exact
 // name reach document grade and link automatically; anything less, or evidence
 // that fits more than one politician, goes to a human.
 func (w *Worker) linkMaskedCPF(ctx context.Context, rec SanctionRecord, sanctionID string, stats *Stats) error {

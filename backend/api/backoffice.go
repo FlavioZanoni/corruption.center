@@ -86,7 +86,7 @@ func (h *backofficeHandler) registerWatcherCase(ctx context.Context, caseNumber,
 	if err != nil {
 		return fmt.Errorf("failed to create/update legal proceeding: %w", err)
 	}
-	// A freshly typed scandal id has no node yet — MERGE it so the
+	// A freshly typed scandal id has no node yet; MERGE it so the
 	// INVESTIGATES edge (a MATCH) cannot silently no-op.
 	if err := h.server.memgraph.UpsertScandal(ctx, scandalID, scandalName, time.Now().Format("2006-01-02")); err != nil {
 		return fmt.Errorf("failed to create scandal: %w", err)
@@ -653,7 +653,7 @@ func (h *backofficeHandler) removalResolve(c *gin.Context) {
 	case "purge":
 		// Verify the request is still pending BEFORE deleting anything. A replayed
 		// POST against an already rejected/resolved request must not delete the
-		// node — the status gate closes that resurrection-by-replay hole.
+		// node; the status gate closes that resurrection-by-replay hole.
 		if req.Status != "pending" {
 			h.renderRemovals(c, "", "purge refused: removal request is not pending (already "+req.Status+")")
 			return
@@ -672,7 +672,7 @@ func (h *backofficeHandler) removalResolve(c *gin.Context) {
 			meta["creation_reason"] = prov.CreationReason
 			meta["edges_deleted"] = prov.EdgeCount
 		}
-		// Deletion record in audit_log — the LGPD "why/what was removed" trail.
+		// Deletion record in audit_log: the LGPD "why/what was removed" trail.
 		_ = h.server.psql.LogAudit(c.Request.Context(), user, psql.AuditActionDelete, "graph_node", req.TargetID, meta)
 
 		// Write purge tombstones so the weekly worker syncs cannot silently

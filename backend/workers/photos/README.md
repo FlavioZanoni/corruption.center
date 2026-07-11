@@ -1,13 +1,13 @@
 # Photos Enrichment Worker
 
-Gives graph entities a photo, hotlinking to official servers only — the backend
+Gives graph entities a photo, hotlinking to official servers only - the backend
 stores **no image bytes**. `photo_url` is always an absolute external URL.
 
 - **Politicians** should all have a photo. Historical politicians (no photo set
   by the camara/senado syncers) get a **TSE** candidate photo hotlink; any still
   without one can be filled from **Wikidata/Wikimedia Commons**.
 - **Organizations** with a Wikidata presence get their **Wikimedia Commons P18
-  image** — never the P154 logo (legal reasons).
+  image** - never the P154 logo (legal reasons).
 
 ## Modes
 
@@ -38,34 +38,34 @@ go run ./workers/photos/cmd --mode=wikidata --dry-run
 
 ### Flags
 
-- `--mode` — `tse`, `wikidata`, or `tse,wikidata` (default both)
-- `--year` — TSE election year for the photo lookup (default `2022`)
-- `--uf` — optional UF filter on `Politician.state` (e.g. `SP`)
-- `--limit` — per-mode cap on graph targets (0 = all)
-- `--dry-run` — resolve + verify but perform no writes
-- `--tse-url-template` — override the TSE candidate-photo URL template (placeholders `{year}`, `{uf}`, `{sq}`)
-- `--sparql-endpoint` — override the Wikidata SPARQL endpoint
-- `--workdir` — where the `consulta_cand` zip is downloaded (metadata only; default system temp)
+- `--mode` - `tse`, `wikidata`, or `tse,wikidata` (default both)
+- `--year` - TSE election year for the photo lookup (default `2022`)
+- `--uf` - optional UF filter on `Politician.state` (e.g. `SP`)
+- `--limit` - per-mode cap on graph targets (0 = all)
+- `--dry-run` - resolve + verify but perform no writes
+- `--tse-url-template` - override the TSE candidate-photo URL template (placeholders `{year}`, `{uf}`, `{sq}`)
+- `--sparql-endpoint` - override the Wikidata SPARQL endpoint
+- `--workdir` - where the `consulta_cand` zip is downloaded (metadata only; default system temp)
 
 ### Env
 
-- `DATABASE_URL` (**required** — psql is the Memgraph migration tracker)
+- `DATABASE_URL` (**required** - psql is the Memgraph migration tracker)
 - `MEMGRAPH_URI` (**required**)
-- `MEMGRAPH_USER` / `MEMGRAPH_PASS` (**optional** — empty for the auth-less dev Memgraph)
+- `MEMGRAPH_USER` / `MEMGRAPH_PASS` (**optional** - empty for the auth-less dev Memgraph)
 
 No `PHOTOS_DIR`: nothing is stored on disk except a transient `consulta_cand`
 metadata zip, which is deleted after the CPF→SQ map is built.
 
 ## Node property contract (for the API / frontend)
 
-**Politician** (set only when `photo_url` was empty — a camara/senado photo is
+**Politician** (set only when `photo_url` was empty - a camara/senado photo is
 never overwritten):
 
 | Property            | Value                                                             |
 | ------------------- | ---------------------------------------------------------------- |
 | `photo_url`         | absolute hotlink (TSE divulgacandcontas, or Commons FilePath)    |
 | `photo_source`      | `TSE Divulgação de Candidaturas {year}` or `Wikimedia Commons`   |
-| `photo_attribution` | Commons: `{file} — Wikimedia Commons ({file page URL})`; TSE: "" |
+| `photo_attribution` | Commons: `{file} - Wikimedia Commons ({file page URL})`; TSE: "" |
 
 **Organization** (set only when `image_url` was empty):
 
@@ -74,10 +74,10 @@ never overwritten):
 | `image_url`         | Commons `Special:FilePath/{file}?width=512` hotlink        |
 | `photo_url`         | same value (mirrored for the shared contract)             |
 | `photo_source`      | `Wikimedia Commons`                                       |
-| `photo_attribution` | `{file} — Wikimedia Commons ({file page URL})`            |
+| `photo_attribution` | `{file} - Wikimedia Commons ({file page URL})`            |
 
 > The Organization API model currently exposes only `image_url` and has no
-> attribution field — flagged for the API agent, since CC-BY-SA attribution is a
+> attribution field - flagged for the API agent, since CC-BY-SA attribution is a
 > legal requirement to render.
 
 ## Hard rules
@@ -98,14 +98,14 @@ never overwritten):
 
 ## TSE hotlink status (2026-07-10)
 
-**Verified** — the per-UF TSE candidate photo bundles
+**Verified** - the per-UF TSE candidate photo bundles
 (`https://cdn.tse.jus.br/estatistica/sead/eleicoes/eleicoes{year}/fotos/foto_cand{year}_{UF}_div.zip`)
 name each photo `F{UF}{SQ_CANDIDATO}_div.jpg` **or** `_div.jpeg` (both
 extensions occur; confirmed by downloading `foto_cand2022_RR_div.zip`, e.g.
 `FRR230002529954_div.jpg`). CPF→SQ_CANDIDATO comes from the `consulta_cand`
 CSVs (`NR_CPF_CANDIDATO`, `SQ_CANDIDATO`).
 
-**Not verified** — a stable, directly-linkable **per-candidate** photo URL. The
+**Not verified** - a stable, directly-linkable **per-candidate** photo URL. The
 `divulgacandcontas` service that serves individual candidate photos was under
 scheduled maintenance (its REST API and static paths returned an HTML
 "Serviço temporariamente indisponível" page, not images) throughout

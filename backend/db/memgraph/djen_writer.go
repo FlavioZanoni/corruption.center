@@ -60,7 +60,7 @@ RETURN p.id AS id, p.name AS name, p.name_aliases AS aliases
 }
 
 // DjenPersonUpsert carries the provenance the DJEN worker attaches to a Person
-// node it creates from a case party (names only — no CPF/CNPJ available).
+// node it creates from a case party (names only; no CPF/CNPJ available).
 type DjenPersonUpsert struct {
 	Name          string
 	ComunicacaoID string // DJEN comunicação id the name was observed in
@@ -70,7 +70,7 @@ type DjenPersonUpsert struct {
 
 // UpsertDjenPerson creates/updates a name-only Person node whose provenance
 // points back at the DJEN communication it was discovered in. It never touches
-// Politician nodes — a name match to a Politician goes through pending_review.
+// Politician nodes: a name match to a Politician goes through pending_review.
 func (db *DB) UpsertDjenPerson(ctx context.Context, p DjenPersonUpsert) (string, error) {
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
@@ -108,7 +108,7 @@ RETURN p.id AS id
 
 // DjenOrganizationUpsert carries the provenance the DJEN worker attaches to an
 // Organization node it creates from a corporate case party. Like Person parties,
-// DJEN destinatarios carry names only — no CNPJ — so the node is name-only and a
+// DJEN destinatarios carry names only (no CNPJ), so the node is name-only and a
 // human attaches the CNPJ later via the "unknown_cnpj" review.
 type DjenOrganizationUpsert struct {
 	Name          string
@@ -203,7 +203,7 @@ type CitedPerson struct {
 
 // ListCitedPersons returns every Person with a DEFENDANT_IN edge. A party is
 // matched against the politician index only once, at discovery, and is then
-// snapshotted so it never reappears in a roster delta — so when the politician
+// snapshotted so it never reappears in a roster delta: so when the politician
 // base grows (a TSE import), previously unmatched defendants stay anonymous
 // forever. This lets a rematch pass re-test them.
 func (db *DB) ListCitedPersons(ctx context.Context) ([]CitedPerson, error) {

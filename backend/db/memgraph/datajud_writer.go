@@ -24,7 +24,7 @@ func (db *DB) UpsertLegalProceedingByCase(ctx context.Context, p DataJudProceedi
 
 	// Empty fields mean "unknown", not "clear it". Case registration (backoffice
 	// seed form, baseline seed) only ensures the node exists and has no facts to
-	// offer, so it must not reset court/status the watcher already derived — this
+	// offer, so it must not reset court/status the watcher already derived; this
 	// upsert runs on every API boot for the baseline cases.
 	query := `
 MERGE (lp:LegalProceeding {case_number: $case_number})
@@ -103,10 +103,10 @@ SET r.outcome = $outcome
 // UpdateProceedingCaseState applies the case-level movement state machine onto
 // a LegalProceeding. phase (when non-empty) sets lp.phase; hasConviction is the
 // value recomputed from the full movement history each poll and is written
-// verbatim (NOT OR-latched) so that a conviction later reversed on appeal — an
-// explicit Absolvição after a Condenação — clears lp.has_conviction rather than
+// verbatim (NOT OR-latched) so that a conviction later reversed on appeal, an
+// explicit Absolvição after a Condenação, clears lp.has_conviction rather than
 // leaving a stale (defamation-grade) true; concluded sets lp.status =
-// "concluded". All flags are case-level — per-defendant outcomes are set only
+// "concluded". All flags are case-level; per-defendant outcomes are set only
 // via backoffice review (see docs/workerDetails/DATAJUD.md).
 func (db *DB) UpdateProceedingCaseState(ctx context.Context, proceedingID, phase string, hasConviction, concluded bool) error {
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})

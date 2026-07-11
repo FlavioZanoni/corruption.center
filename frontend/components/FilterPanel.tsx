@@ -5,7 +5,7 @@ import { useAppStore } from "@/lib/store";
 import type { LayoutMode } from "@/lib/store";
 import { NODE_COLORS } from "@/lib/constants";
 
-// Edge status colors — kept local since they're only used here
+// Edge status colors: kept local since they're only used here
 const EDGE_STATUS_COLORS: Record<string, string> = {
   convicted: "#cc2222",
   indicted: "#cc7722",

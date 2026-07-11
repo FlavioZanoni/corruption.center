@@ -17,7 +17,7 @@ const (
 	wikidataEntityData    = "https://www.wikidata.org/wiki/Special:EntityData/%s.json"
 
 	// commonsFilePath builds a stable hotlink to the Commons file bytes. Adding
-	// ?width=512 asks Commons to serve a thumbnail. This is a hotlink — we never
+	// ?width=512 asks Commons to serve a thumbnail. This is a hotlink - we never
 	// copy the bytes.
 	commonsFilePath = "https://commons.wikimedia.org/wiki/Special:FilePath/%s?width=512"
 
@@ -151,7 +151,7 @@ func sleepFor(ctx context.Context, backoff *time.Duration) bool {
 
 // orgImageSPARQL queries for an org whose P6204 (CNPJ) matches either the raw
 // 14-digit or the formatted CNPJ, returning its P18 image. P154 (logo) is NEVER
-// requested — only P18 — for legal reasons.
+// requested - only P18 - for legal reasons.
 func orgImageSPARQL(cnpj14 string) string {
 	formatted := formatCNPJ(cnpj14)
 	return fmt.Sprintf(`SELECT ?image WHERE {
@@ -387,5 +387,5 @@ func buildCommonsThumbURL(file string) string {
 func buildCommonsAttribution(file string) string {
 	f := strings.TrimSpace(file)
 	page := fmt.Sprintf(commonsFilePage, url.PathEscape(strings.ReplaceAll(f, " ", "_")))
-	return fmt.Sprintf("%s — Wikimedia Commons (%s)", f, page)
+	return fmt.Sprintf("%s: Wikimedia Commons (%s)", f, page)
 }

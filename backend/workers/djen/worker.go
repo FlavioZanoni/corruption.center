@@ -67,9 +67,13 @@ type RunStats struct {
 	// CasesRegistered counts cases DJEN discovered and started watching without
 	// human review: registering a case makes no claim about any person.
 	CasesRegistered int `json:"cases_registered"`
-	SkippedTracked  int `json:"skipped_already_tracked"`
-	SkippedExisting int `json:"skipped_already_reviewed"`
-	SkippedClass    int `json:"skipped_class_filter"`
+	// SkippedUnregistrable counts discovered cases that could not be watched: a
+	// case number that is not 20 digits, or a publication naming no tribunal (so
+	// no DataJud endpoint resolves).
+	SkippedUnregistrable int `json:"skipped_unregistrable"`
+	SkippedTracked       int `json:"skipped_already_tracked"`
+	SkippedExisting      int `json:"skipped_already_reviewed"`
+	SkippedClass         int `json:"skipped_class_filter"`
 	// SkippedTombstoned counts parties whose name was LGPD-purged: the Person or
 	// Organization node is NOT re-created (resurrection guard, migration 008).
 	SkippedTombstoned int `json:"skipped_tombstoned"`
@@ -79,8 +83,7 @@ type RunStats struct {
 	// politician index (rematch mode).
 	PersonsRematched int `json:"persons_rematched"`
 	// FetchErrors counts DJEN lookups abandoned after the client exhausted its
-	// retries. DJEN returns sporadic 500s, and a run scans hundreds of names —
-	// one bad lookup skips its item instead of discarding the whole run.
+	// retries. DJEN returns sporadic 500s, and a run scans hundreds of names; one bad lookup skips its item instead of discarding the whole run.
 	FetchErrors int `json:"fetch_errors"`
 }
 
@@ -125,7 +128,7 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 
 // runRematchMode re-tests Person defendants we already discovered against the
 // current politician index. A party is matched only once, at discovery, and then
-// snapshotted out of future roster deltas — so defendants found while the
+// snapshotted out of future roster deltas; so defendants found while the
 // politician base was small (or before a TSE import added the state-level
 // offices) would stay anonymous forever. This is the only path by which a
 // pre-2023 case, whose party list can never be re-fetched, gains a politician.
@@ -405,12 +408,17 @@ func (w *Worker) runNameMode(ctx context.Context, opts Options, pols []memgraph.
 					// creates the LegalProceeding and starts polling it. The claim
 					// "this politician is a defendant" is a separate, name-only
 					// inference and still goes to review (case mode / rematch).
-					// So no human is needed here — the discovery is the case, and
+					// So no human is needed here - the discovery is the case, and
 					// its provenance (DJEN publication) is recorded on the case.
-					if err := w.registerDiscoveredCase(ctx, caseDigits, group); err != nil {
+					registered, err := w.registerDiscoveredCase(ctx, caseDigits, group)
+					if err != nil {
 						return err
 					}
-					stats.CasesRegistered++
+					if registered {
+						stats.CasesRegistered++
+					} else {
+						stats.SkippedUnregistrable++
+					}
 				}
 				stats.CandidatesFlagged++
 			}
@@ -427,22 +435,28 @@ func (w *Worker) runNameMode(ctx context.Context, opts Options, pols []memgraph.
 // The case is registered with no scandal: DJEN found it through one politician's
 // name, which says nothing about which scandal (if any) it belongs to. An
 // operator can attach it to a scandal later; until then it stands alone.
-func (w *Worker) registerDiscoveredCase(ctx context.Context, caseNumber string, group []Item) error {
+// It reports whether the case was actually registered: a malformed case number
+// or a publication with no tribunal cannot be watched, and is logged and skipped
+// rather than counted as registered.
+func (w *Worker) registerDiscoveredCase(ctx context.Context, caseNumber string, group []Item) (bool, error) {
 	if len(caseNumber) != 20 {
 		w.log.Warn("djen: refusing to register a case whose number is not 20 digits", "case", caseNumber)
-		return nil
+		return false, nil
 	}
 	endpoint := endpointForGroup(group)
 	if endpoint == "" {
 		w.log.Warn("djen: no tribunal on the publication; cannot resolve a DataJud endpoint", "case", caseNumber)
-		return nil
+		return false, nil
 	}
 
 	lpID, err := w.mg.UpsertLegalProceedingByCase(ctx, memgraph.DataJudProceedingUpsert{CaseNumber: caseNumber})
 	if err != nil {
-		return err
+		return false, err
 	}
-	return w.pg.UpsertWatcherCase(ctx, caseNumber, endpoint, "", lpID, workerName)
+	if err := w.pg.UpsertWatcherCase(ctx, caseNumber, endpoint, "", lpID, workerName); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func namesFor(pol memgraph.PoliticianNames) []string {
@@ -590,7 +604,7 @@ var (
 		"tribunal do juri",
 	}
 	// juriWordRe matches "juri" (júri, accents already stripped) only as a whole
-	// word — so tribunal-do-júri classes pass, but JURISDICAO and JURIDICA (which
+	// word - so tribunal-do-júri classes pass, but JURISDICAO and JURIDICA (which
 	// merely start with "juri") do NOT. This fixes a real false positive.
 	juriWordRe = regexp.MustCompile(`\bjuri\b`)
 )

@@ -15,11 +15,11 @@ const workerName = "cnpj"
 
 // maxHops bounds how deep an OWNED_BY shell chain is followed within a single
 // run. Root orgs are depth 0; a corporate partner is depth 1; its partner depth
-// 2. Beyond this the chain is not expanded this run — newly created partner orgs
+// 2. Beyond this the chain is not expanded this run; newly created partner orgs
 // keep their un-enriched flag and are picked up by a later pass.
 //
 // ponytail: hard ceiling of 2 hops per run. Deep shell chains resolve across
-// multiple scheduled runs instead of one unbounded recursive crawl — good enough
+// multiple scheduled runs instead of one unbounded recursive crawl; good enough
 // and self-throttling. Raise only if a real case demonstrably needs it.
 const maxHops = 2
 

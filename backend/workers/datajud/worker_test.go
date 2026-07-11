@@ -106,7 +106,7 @@ func TestDeriveCaseState_Concluded(t *testing.T) {
 
 func TestDeriveCaseState_FullConvictedLifecycle(t *testing.T) {
 	// A conviction case-tree: denúncia accepted, sentença, condenação, then
-	// baixa definitiva. Case-level flags only — no per-defendant attribution.
+	// baixa definitiva. Case-level flags only; no per-defendant attribution.
 	movs := movementsFromJSON(t, `[
 		{"id":"1","codigo":"51","nome":"Recebimento de denúncia"},
 		{"id":"2","codigo":"848","nome":"Sentença"},
@@ -201,8 +201,8 @@ func TestDeriveCaseState_SentencaComplementConviction(t *testing.T) {
 }
 
 func TestDeriveCaseState_ExplicitDispositionOrderWins(t *testing.T) {
-	// A conviction (60) followed by a later explicit acquittal (61) — e.g.
-	// reversed on appeal — must NOT latch: the last explicit disposition wins,
+	// A conviction (60) followed by a later explicit acquittal (61), e.g.,
+	// reversed on appeal, must NOT latch: the last explicit disposition wins,
 	// so the case ends acquitted (has_conviction=false). This is the
 	// defamation-grade regression the fix targets.
 	convictionThenAcquittal := movementsFromJSON(t, `[
@@ -215,7 +215,7 @@ func TestDeriveCaseState_ExplicitDispositionOrderWins(t *testing.T) {
 		t.Fatalf("conviction→acquittal: expected has_conviction=false (cleared), got %+v", st)
 	}
 
-	// The reverse order — acquittal first, later conviction — ends convicted.
+	// The reverse order: acquittal first, later conviction; ends convicted.
 	acquittalThenConviction := movementsFromJSON(t, `[
 		{"id":"1","codigo":"61","nome":"Absolvição","dataHora":"2016-03-01T10:00:00Z"},
 		{"id":"2","codigo":"60","nome":"Condenação","dataHora":"2017-06-01T10:00:00Z"}

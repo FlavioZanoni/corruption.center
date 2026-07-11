@@ -20,7 +20,7 @@ func main() {
 		baseURL = flag.String("base-url", os.Getenv("CNPJ_API_BASE"), "CNPJ provider base URL (default env CNPJ_API_BASE or https://minhareceita.org)")
 		limit   = flag.Int("limit", 0, "Max root Organization nodes to enrich (0 = all needing enrichment)")
 		dryRun  = flag.Bool("dry-run", false, "Fetch and classify but perform no writes")
-		single  = flag.String("cnpj", "", "Enrich a single CNPJ (14 digits) — for testing")
+		single  = flag.String("cnpj", "", "Enrich a single CNPJ (14 digits): for testing")
 	)
 	flag.Parse()
 

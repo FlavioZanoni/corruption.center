@@ -243,7 +243,7 @@ func TestRemovalResolve_Purge_WritesTombstones(t *testing.T) {
 		t.Fatalf("expected one tombstone write, got %d", len(ps.tombstoneKeys))
 	}
 	keys := ps.tombstoneKeys[0]
-	// A CPF key and a NAME key (normalized) — no CNPJ key for a Person.
+	// A CPF key and a NAME key (normalized): no CNPJ key for a Person.
 	wantCPF := psql.TombstoneKeyCPF("12345678901")
 	wantName := psql.TombstoneKeyName("João Da Silva")
 	var sawCPF, sawName bool

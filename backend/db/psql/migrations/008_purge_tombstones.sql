@@ -6,7 +6,7 @@
 -- table before creating a node, otherwise the weekly syncs silently resurrect
 -- personal data that was legally removed (LGPD art. 18).
 --
--- subject_key formats (normalized, one row per key — a purge may write several):
+-- subject_key formats (normalized, one row per key: a purge may write several):
 --   cpf:<11 digits>            full CPF known
 --   cnpj:<14 digits>           organization CNPJ
 --   name:<NORMALIZED NAME>     uppercase, accents stripped, single spaces

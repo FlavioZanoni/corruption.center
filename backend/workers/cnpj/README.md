@@ -1,7 +1,7 @@
 # CNPJ Enricher Worker
 
 Enriches `Organization` nodes that carry a CNPJ but are missing detailed data,
-extracts the QSA (Quadro de Sócios e Administradores — board/ownership), links
+extracts the QSA (Quadro de Sócios e Administradores - board/ownership), links
 individuals via `CONTROLS`, and follows shell ownership chains via `OWNED_BY`.
 Spec: `docs/sources_workers.md` (CNPJ Enricher) and `docs/arch.md`.
 
@@ -33,13 +33,13 @@ a **masked CPF** (`***641988**`, an individual) or a full **14-digit CNPJ**
 For each `Organization` node needing enrichment (`enriched` flag missing/false):
 
 1. Fetch the CNPJ, write the mapped fields, set `enriched = true` and `source_url`
-   (the provider deep-link — required for provenance).
+   (the provider deep-link - required for provenance).
 2. For each QSA entry, classify `cnpj_cpf_do_socio`:
    - **Masked CPF (individual)** → take the 6 visible middle digits and partial-
      match against `Politician` CPFs (`MatchPoliticiansByMaskedCPF`).
      - Match → `pending_review` type `possible_politician_in_qsa` carrying the
        organization id/cnpj, the candidate politician id(s), the socio name, the
-       masked CPF, and the source URL. **Never** auto-creates an edge — a human
+       masked CPF, and the source URL. **Never** auto-creates an edge - a human
        confirms the identity (masked CPFs collide).
      - No match → name-keyed `Person` node + `CONTROLS` edge (person → org).
    - **Full CNPJ (company)** → partner `Organization` (merged by CNPJ) +
@@ -50,7 +50,7 @@ For each `Organization` node needing enrichment (`enriched` flag missing/false):
 
 **LGPD purge guard:** before auto-creating a QSA `Person` (no-politician-match
 path) or a partner `Organization`, the worker consults `purge_tombstone`
-(migration 008) via `IsSubjectPurged` — keyed on the socio **name** for
+(migration 008) via `IsSubjectPurged` - keyed on the socio **name** for
 individuals (QSA exposes only a masked CPF, no full digits) and on the partner
 **CNPJ** for companies. A purged subject is skipped (no node, no edge, no
 shell-chain expansion) and counted in `stats.skipped_tombstoned`.
@@ -70,7 +70,7 @@ resolve incrementally instead of via one unbounded recursive crawl.
 - Provider `404` (unknown CNPJ) is skipped, not an error.
 
 > **Pointing at the shared PUBLIC minha receita instance?** It is a courtesy
-> service — set `CNPJ_RATE_PER_MIN` low (e.g. `10`). The 60/min default assumes a
+> service - set `CNPJ_RATE_PER_MIN` low (e.g. `10`). The 60/min default assumes a
 > self-hosted instance.
 
 ## Configuration
@@ -79,8 +79,8 @@ resolve incrementally instead of via one unbounded recursive crawl.
 | -------------------- | -------------------------- | ---------------------------------------- |
 | `CNPJ_API_BASE`      | `https://minhareceita.org` | provider base URL (`--base-url` overrides)|
 | `CNPJ_RATE_PER_MIN`  | `60`                       | request rate; lower for the public instance |
-| `DATABASE_URL`       | —  (required)              | Postgres (pending reviews)               |
-| `MEMGRAPH_URI`       | —  (required)              | Memgraph (graph writes)                  |
+| `DATABASE_URL`       | -  (required)              | Postgres (pending reviews)               |
+| `MEMGRAPH_URI`       | - (required)              | Memgraph (graph writes)                  |
 | `MEMGRAPH_USER/PASS` | optional                   | dev Memgraph is auth-less                |
 
 ## Run
@@ -106,9 +106,9 @@ CNPJ), `--base-url` (provider override).
 
 - `Organization` nodes: enriched fields + `enriched`/`source_url`.
 - `Person` nodes + `CONTROLS` edges (QSA individuals with no politician match).
-- `Organization` + `OWNED_BY` edges (QSA corporate partners — shell chains).
+- `Organization` + `OWNED_BY` edges (QSA corporate partners - shell chains).
 - `pending_review` type `possible_politician_in_qsa` (already in the CHECK
-  constraint, migration `002_djen.sql`) — masked-CPF hits on a Politician.
+  constraint, migration `002_djen.sql`): masked-CPF hits on a Politician.
 
 No dedicated Postgres migration or state table: the "needs enrichment" queue is
 derived from the graph (`enriched` flag), and the only review type used already

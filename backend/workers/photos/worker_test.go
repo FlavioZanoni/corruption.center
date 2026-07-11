@@ -170,7 +170,7 @@ func TestBuildCommonsURLAndAttribution(t *testing.T) {
 		t.Errorf("thumb url = %q", url)
 	}
 	attr := buildCommonsAttribution("Foo Bar.jpg")
-	if !strings.HasPrefix(attr, "Foo Bar.jpg — Wikimedia Commons") ||
+	if !strings.HasPrefix(attr, "Foo Bar.jpg: Wikimedia Commons") ||
 		!strings.Contains(attr, "https://commons.wikimedia.org/wiki/File:Foo_Bar.jpg") {
 		t.Errorf("attribution = %q", attr)
 	}

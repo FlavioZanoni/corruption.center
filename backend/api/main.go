@@ -49,7 +49,10 @@ func (s *ApiServer) SetupRouter() *gin.Engine {
 		v1.GET("/search", h.Search.Search)
 		v1.GET("/politicians", h.Politician.ListPoliticians)
 		v1.GET("/politician/:id", h.Politician.GetPolitician)
+		v1.GET("/scandals", h.Scandal.ListScandals)
 		v1.GET("/scandal/:id", h.Scandal.GetScandal)
+		v1.GET("/proceedings", h.Proceeding.ListProceedings)
+		v1.GET("/proceeding/:id", h.Proceeding.GetProceeding)
 		v1.GET("/timeline", h.Timeline.GetTimeline)
 	}
 

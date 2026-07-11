@@ -14,7 +14,7 @@ func main() {
 
 	ctx := context.Background()
 
-	// psql must start first — owns schema_migrations for both dbs
+	// psql must start first: owns schema_migrations for both dbs
 	pg, err := psql.New(ctx, mustEnv("DATABASE_URL"), log)
 	if err != nil {
 		log.Error("failed to connect to postgres", "err", err)

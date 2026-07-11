@@ -1,11 +1,11 @@
-# Câmara Sync — Deep Dive
+# Câmara Sync: Deep Dive
 
 ## Purpose
 
 Fetches **all currently active federal deputies** and upserts them
 as `Politician` nodes.
 Sets `active: true`, updates `party_current`, `role_current`, `photo_url`.
-Source of truth for current mandate — overrides TSE data.
+Source of truth for current mandate; overrides TSE data.
 
 By default, `GET /deputados` (no time params) returns **only deputies in
 exercise at request time**.
@@ -17,7 +17,7 @@ exercise at request time**.
 Base: `https://dadosabertos.camara.leg.br/api/v2/`
 JSON, no auth, paginated (`pagina`, `itens` ≤ 100).
 
-### 1. `GET /deputados` — Current list (default = active only)
+### 1. `GET /deputados`: Current list (default = active only)
 
 No `idLegislatura` or date params needed for current.
 Optional: `siglaUf`, `siglaPartido`, `itens=100`.
@@ -31,7 +31,7 @@ Response fields (from `dados`):
 - `urlFoto` → `photo_url`
 - `cpf` (in some responses / via detail)
 
-### 2. `GET /deputados/{id}` — Full details
+### 2. `GET /deputados/{id}`: Full details
 
 Required for: `cpf`, `nomeCivil`, `ultimoStatus` (confirm "Em exercício"),
 `sexo`, birth data, etc.

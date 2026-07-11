@@ -10,8 +10,7 @@
 
 ALTER TABLE pending_review DROP CONSTRAINT IF EXISTS pending_review_type_check;
 
--- NOTE: this constraint is the UNION of all types known up to this migration —
--- it must include the DJEN types added in 002_djen.sql, since each rebuild
+-- NOTE: this constraint is the UNION of all types known up to this migration: -- it must include the DJEN types added in 002_djen.sql, since each rebuild
 -- replaces the whole allowlist.
 ALTER TABLE pending_review ADD CONSTRAINT pending_review_type_check CHECK (type IN (
   'unknown_cpf',                   -- DataJud found a case party CPF not in DB

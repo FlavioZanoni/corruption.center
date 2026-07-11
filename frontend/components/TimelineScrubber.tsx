@@ -85,7 +85,7 @@ export function TimelineScrubber() {
 
   return (
     // The gradient spans the full width but is only decorative: without
-    // pointer-events-none it swallows every click in the bottom strip — the
+    // pointer-events-none it swallows every click in the bottom strip - the
     // footer links and any graph node that sits there.
     <div className="absolute bottom-0 left-0 right-0 z-20 flex justify-center pb-4 pt-3 bg-linear-to-t from-bg to-transparent pointer-events-none">
       <div className="w-full max-w-2xl px-8 pointer-events-auto">
@@ -169,7 +169,7 @@ export function TimelineScrubber() {
 
         <div className="mt-2 flex justify-center">
           <span className="text-[10px] font-mono text-text-muted">
-            {timelineRange.from} — {timelineRange.to}
+            {timelineRange.from} - {timelineRange.to}
           </span>
         </div>
       </div>

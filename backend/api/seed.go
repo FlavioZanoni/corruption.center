@@ -10,7 +10,7 @@ import (
 
 // Baseline scandals: the landmark Brazilian corruption cases, hardcoded so a
 // fresh install boots with real content instead of an empty graph. Seeding runs
-// on every API start and is idempotent — it is exactly the backoffice seed flow
+// on every API start and is idempotent: it is exactly the backoffice seed flow
 // (Scandal node + LegalProceeding + watcher_tracking row), so from the first
 // boot the DataJud watcher polls these cases and DJEN discovers their parties.
 //

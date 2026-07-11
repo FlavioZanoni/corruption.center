@@ -29,8 +29,7 @@ type OrganizationEnrichment struct {
 }
 
 // ListOrganizationsNeedingEnrichment returns Organization nodes that carry a
-// 14-digit CNPJ but have not been enriched yet (enriched flag missing/false —
-// which also covers nodes still missing their razão social). Bounded by limit
+// 14-digit CNPJ but have not been enriched yet (enriched flag missing/false: // which also covers nodes still missing their razão social). Bounded by limit
 // (limit <= 0 returns all).
 func (db *DB) ListOrganizationsNeedingEnrichment(ctx context.Context, limit int) ([]OrgToEnrich, error) {
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})

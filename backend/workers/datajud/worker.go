@@ -215,13 +215,13 @@ type caseState struct {
 //
 // Conviction is derived with precedence: an explicit disposition movement
 // (code 60 Condenação / 61 Absolvição) always wins over any 848 inference, and
-// the LAST explicit disposition in chronological order is authoritative — a
+// the LAST explicit disposition in chronological order is authoritative; a
 // conviction reversed on appeal (a later Absolvição) must clear the conviction
 // rather than latch it (defamation-grade if it did not). Movements are
 // evaluated in chronological order by dataHora, falling back to input order
 // when timestamps are missing or equal. When no explicit 60/61 exists, the
 // disposition of a Sentença (848) is inferred from its nome, complementos, and
-// complementosTabelados — convictions frequently live there (e.g. "Sentença
+// complementosTabelados: convictions frequently live there (e.g. "Sentença
 // condenatória", "Procedente") rather than as a standalone code-60 movement, so
 // scanning them avoids losing convictions.
 func deriveCaseState(movs []map[string]any) caseState {
@@ -318,7 +318,7 @@ func movementTime(m map[string]any) (time.Time, bool) {
 // sentencaComplementSignals inspects a Sentença (code 848) movement to infer
 // its disposition when no explicit Condenação (60) / Absolvição (61) movement is
 // present. It scans the movement's nome, its plain complementos string-list, and
-// its complementosTabelados nome/descricao entries — a conviction may be encoded
+// its complementosTabelados nome/descricao entries: a conviction may be encoded
 // in any of them (e.g. nome "Sentença condenatória" with no tabulated
 // complement). All text is normalized to lowercase and accent-folded before
 // matching. Because "improcedente" contains "procedente", acquittal signals are

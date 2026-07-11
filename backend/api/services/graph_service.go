@@ -16,6 +16,9 @@ type GraphService interface {
 	GetPolitician(ctx context.Context, id string) (*models.Politician, error)
 	GetScandal(ctx context.Context, id string) (*models.Scandal, error)
 	ListPoliticians(ctx context.Context, filter, party, uf, sort string, page, pageSize int) (*models.PoliticianListResponse, error)
+	ListScandals(ctx context.Context, sort string, page, pageSize int) (*models.ScandalListResponse, error)
+	ListProceedings(ctx context.Context, page, pageSize int) (*models.ProceedingListResponse, error)
+	GetProceeding(ctx context.Context, id string) (*models.ProceedingDetailResponse, error)
 }
 
 type graphService struct {
@@ -52,4 +55,16 @@ func (s *graphService) GetScandal(ctx context.Context, id string) (*models.Scand
 
 func (s *graphService) ListPoliticians(ctx context.Context, filter, party, uf, sort string, page, pageSize int) (*models.PoliticianListResponse, error) {
 	return s.memgraph.QueryPoliticians(ctx, filter, party, uf, sort, page, pageSize)
+}
+
+func (s *graphService) ListScandals(ctx context.Context, sort string, page, pageSize int) (*models.ScandalListResponse, error) {
+	return s.memgraph.QueryScandals(ctx, sort, page, pageSize)
+}
+
+func (s *graphService) ListProceedings(ctx context.Context, page, pageSize int) (*models.ProceedingListResponse, error) {
+	return s.memgraph.QueryProceedings(ctx, page, pageSize)
+}
+
+func (s *graphService) GetProceeding(ctx context.Context, id string) (*models.ProceedingDetailResponse, error) {
+	return s.memgraph.QueryProceeding(ctx, id)
 }
