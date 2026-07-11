@@ -60,12 +60,23 @@ func (db *DB) QueryExpandNode(ctx context.Context, id string, hops int) (*models
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
-	result, err := session.Run(ctx, `
-    MATCH path = (n {id: $id})-[*1..$hops]-(m)
+	// Memgraph rejects property-map matching and parameterized bounds inside
+	// variable-length patterns, so filter via WHERE and inline the clamped
+	// integer bound.
+	if hops < 1 {
+		hops = 1
+	}
+	if hops > 3 {
+		hops = 3
+	}
+	query := fmt.Sprintf(`
+    MATCH path = (n)-[*1..%d]-(m)
+    WHERE n.id = $id
     UNWIND nodes(path) AS node
     UNWIND relationships(path) AS rel
     RETURN DISTINCT node, rel
-  `, map[string]any{"id": id, "hops": hops})
+  `, hops)
+	result, err := session.Run(ctx, query, map[string]any{"id": id})
 	if err != nil {
 		return nil, fmt.Errorf("memgraph: query expand node: %w", err)
 	}
