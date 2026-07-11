@@ -2,6 +2,7 @@ package api
 
 import (
 	"corruption-center/api/handlers"
+	"corruption-center/api/middleware"
 	"corruption-center/api/services"
 	"corruption-center/db/memgraph"
 	"corruption-center/db/psql"
@@ -30,6 +31,7 @@ func NewApiServer(psql psql.Repository, memgraph memgraph.Repository) *ApiServer
 func (s *ApiServer) SetupRouter() *gin.Engine {
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
+	r.Use(middleware.CORS())
 
 	graphSvc := services.NewGraphService(s.memgraph)
 	searchSvc := services.NewSearchService(s.memgraph)
