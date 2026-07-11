@@ -22,7 +22,7 @@ type Repository interface {
 	QuerySearch(ctx context.Context, q string, nodeType string) (*models.GraphResponse, error)
 
 	// browse
-	QueryPoliticians(ctx context.Context, filter, party, uf string, page, pageSize int) (*models.PoliticianListResponse, error)
+	QueryPoliticians(ctx context.Context, filter, party, uf, sort string, page, pageSize int) (*models.PoliticianListResponse, error)
 
 	// backoffice writes
 	UpsertLegalProceedingByCase(ctx context.Context, p DataJudProceedingUpsert) (string, error)

@@ -7,6 +7,7 @@ export interface PoliticianBrowseParams {
   uf?: string
   page?: number
   pageSize?: number
+  sort?: "connections" | "name"
 }
 
 // Paginated, filterable politician browse. Backs the /politicos entry point so a
@@ -18,6 +19,7 @@ export async function fetchPoliticians(
   if (params.filter) search.set("filter", params.filter)
   if (params.party) search.set("party", params.party)
   if (params.uf) search.set("uf", params.uf)
+  if (params.sort) search.set("sort", params.sort)
   if (params.page) search.set("page", String(params.page))
   if (params.pageSize) search.set("page_size", String(params.pageSize))
 

@@ -13,7 +13,7 @@ const defaultPoliticianPageSize = 24
 // QueryPoliticians returns a paginated, filterable list of Politician nodes.
 // It exists so a fresh install (politicians synced, no scandals yet) still has
 // browsable content. Sanction and proceeding counts are cheap aggregate hops.
-func (db *DB) QueryPoliticians(ctx context.Context, filter, party, uf string, page, pageSize int) (*models.PoliticianListResponse, error) {
+func (db *DB) QueryPoliticians(ctx context.Context, filter, party, uf, sort string, page, pageSize int) (*models.PoliticianListResponse, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -56,18 +56,28 @@ func (db *DB) QueryPoliticians(ctx context.Context, filter, party, uf string, pa
 		return nil, fmt.Errorf("memgraph: count politicians rows: %w", err)
 	}
 
-	res, err := session.Run(ctx, `
+	// ORDER BY cannot be parameterized — allowlist the sort modes and inline
+	// the clause. "connections" = total relationship degree, so the most
+	// linked politicians surface first.
+	orderBy := "connection_count DESC, p.name"
+	if sort == "name" {
+		orderBy = "p.name"
+	}
+	res, err := session.Run(ctx, fmt.Sprintf(`
     MATCH (p:Politician)
     WHERE ($filter = '' OR toLower(p.name) CONTAINS toLower($filter))
       AND ($party = '' OR p.party_current = $party)
       AND ($uf = '' OR p.state = $uf)
     OPTIONAL MATCH (p)-[:SANCTIONED_IN]->(san:Sanction)
     OPTIONAL MATCH (p)-[:DEFENDANT_IN]->(lp:LegalProceeding)
-    WITH p, count(DISTINCT san) AS sanction_count, count(DISTINCT lp) AS proceeding_count
-    RETURN p, sanction_count, proceeding_count
-    ORDER BY p.name
+    OPTIONAL MATCH (p)-[rel]-()
+    WITH p, count(DISTINCT san) AS sanction_count,
+         count(DISTINCT lp) AS proceeding_count,
+         count(DISTINCT rel) AS connection_count
+    RETURN p, sanction_count, proceeding_count, connection_count
+    ORDER BY %s
     SKIP $skip LIMIT $limit
-  `, params)
+  `, orderBy), params)
 	if err != nil {
 		return nil, fmt.Errorf("memgraph: query politicians: %w", err)
 	}
@@ -83,6 +93,7 @@ func (db *DB) QueryPoliticians(ctx context.Context, filter, party, uf string, pa
 		p := node.Props
 		scVal, _ := rec.Get("sanction_count")
 		pcVal, _ := rec.Get("proceeding_count")
+		ccVal, _ := rec.Get("connection_count")
 		items = append(items, models.PoliticianListItem{
 			ID:               strProp(p, "id"),
 			Name:             strProp(p, "name"),
@@ -93,6 +104,7 @@ func (db *DB) QueryPoliticians(ctx context.Context, filter, party, uf string, pa
 			PhotoAttribution: strProp(p, "photo_attribution"),
 			SanctionCount:    int(asInt(scVal)),
 			ProceedingCount:  int(asInt(pcVal)),
+			ConnectionCount:  int(asInt(ccVal)),
 		})
 	}
 	if err := res.Err(); err != nil {

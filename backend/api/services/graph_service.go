@@ -15,7 +15,7 @@ type GraphService interface {
 	GetTimeline(ctx context.Context, from time.Time, to time.Time) (*models.GraphResponse, error)
 	GetPolitician(ctx context.Context, id string) (*models.Politician, error)
 	GetScandal(ctx context.Context, id string) (*models.Scandal, error)
-	ListPoliticians(ctx context.Context, filter, party, uf string, page, pageSize int) (*models.PoliticianListResponse, error)
+	ListPoliticians(ctx context.Context, filter, party, uf, sort string, page, pageSize int) (*models.PoliticianListResponse, error)
 }
 
 type graphService struct {
@@ -50,6 +50,6 @@ func (s *graphService) GetScandal(ctx context.Context, id string) (*models.Scand
 	return s.memgraph.QueryScandal(ctx, id)
 }
 
-func (s *graphService) ListPoliticians(ctx context.Context, filter, party, uf string, page, pageSize int) (*models.PoliticianListResponse, error) {
-	return s.memgraph.QueryPoliticians(ctx, filter, party, uf, page, pageSize)
+func (s *graphService) ListPoliticians(ctx context.Context, filter, party, uf, sort string, page, pageSize int) (*models.PoliticianListResponse, error) {
+	return s.memgraph.QueryPoliticians(ctx, filter, party, uf, sort, page, pageSize)
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { ArrowLeft, Search, Ban, Scale } from "lucide-react";
+import { ArrowLeft, Search, Ban, Scale, Share2 } from "lucide-react";
 import { fetchPoliticians } from "@/lib/api/politicians";
 import { useAppStore } from "@/lib/store";
 import { NODE_COLORS } from "@/lib/constants";
@@ -76,8 +76,17 @@ function PoliticianCard({
           </div>
         )}
       </div>
-      {(item.sanction_count > 0 || item.proceeding_count > 0) && (
+      {(item.sanction_count > 0 || item.proceeding_count > 0 || item.connection_count > 0) && (
         <div className="flex items-center gap-3 mt-1">
+          {item.connection_count > 0 && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-mono text-text-muted"
+              title={`${item.connection_count} conexões no grafo`}
+            >
+              <Share2 size={11} strokeWidth={1.5} />
+              {item.connection_count}
+            </span>
+          )}
           {item.sanction_count > 0 && (
             <span className="inline-flex items-center gap-1 text-[10px] font-mono text-[#d98a4b]">
               <Ban size={11} strokeWidth={1.5} />
@@ -105,6 +114,7 @@ export default function PoliticiansBrowsePage() {
   const [party, setParty] = useState("");
   const [uf, setUf] = useState("");
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<"connections" | "name">("connections");
 
   // debounce the name filter
   useEffect(() => {
@@ -116,9 +126,9 @@ export default function PoliticiansBrowsePage() {
   }, [filterInput]);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["politicians", filter, party, uf, page],
+    queryKey: ["politicians", filter, party, uf, sort, page],
     queryFn: () =>
-      fetchPoliticians({ filter, party, uf, page, pageSize: PAGE_SIZE }),
+      fetchPoliticians({ filter, party, uf, sort, page, pageSize: PAGE_SIZE }),
     placeholderData: keepPreviousData,
   });
 
@@ -203,6 +213,17 @@ export default function PoliticiansBrowsePage() {
                 {u}
               </option>
             ))}
+          </select>
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value as "connections" | "name");
+              setPage(1);
+            }}
+            className="bg-surface border border-border rounded-sm px-3 py-2 text-sm font-mono text-text focus:outline-none focus:border-[#c8a96e]/60"
+          >
+            <option value="connections">Mais conexões</option>
+            <option value="name">Nome (A–Z)</option>
           </select>
         </div>
 

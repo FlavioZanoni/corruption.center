@@ -27,6 +27,7 @@ type PoliticianListItem struct {
 	PhotoURL         string `json:"photo_url,omitempty"`
 	PhotoAttribution string `json:"photo_attribution,omitempty"`
 	SanctionCount    int    `json:"sanction_count"`
+	ConnectionCount  int    `json:"connection_count"`
 	ProceedingCount  int    `json:"proceeding_count"`
 }
 

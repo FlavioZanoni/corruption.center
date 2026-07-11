@@ -62,6 +62,7 @@ func (h *PoliticianHandler) GetPolitician(c *gin.Context) {
 // @Param        uf      query     string  false  "Exact state/UF filter (state)"
 // @Param        page    query     int     false  "Page number (1-based, default 1)"
 // @Param        page_size query   int     false  "Items per page (default 24, max 100)"
+// @Param        sort    query     string  false  "Sort order: connections (default, most linked first) or name"
 // @Success      200  {object}  models.PoliticianListResponse
 // @Failure      500  {object}  models.ErrorResponse
 // @Router       /politicians [get]
@@ -70,10 +71,15 @@ func (h *PoliticianHandler) ListPoliticians(c *gin.Context) {
 	party := c.Query("party")
 	uf := c.Query("uf")
 
+	sort := c.Query("sort")
+	if sort != "name" {
+		sort = "connections"
+	}
+
 	page, _ := strconv.Atoi(c.Query("page"))
 	pageSize, _ := strconv.Atoi(c.Query("page_size"))
 
-	list, err := h.service.ListPoliticians(c.Request.Context(), filter, party, uf, page, pageSize)
+	list, err := h.service.ListPoliticians(c.Request.Context(), filter, party, uf, sort, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

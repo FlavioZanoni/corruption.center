@@ -138,6 +138,7 @@ export interface PoliticianListItem {
   photo_url?: string
   photo_attribution?: string
   sanction_count: number
+  connection_count: number
   proceeding_count: number
 }
 

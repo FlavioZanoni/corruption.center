@@ -245,6 +245,12 @@ const docTemplate = `{
                         "description": "Items per page (default 24, max 100)",
                         "name": "page_size",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort order: connections (default, most linked first) or name",
+                        "name": "sort",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -563,6 +569,9 @@ const docTemplate = `{
         "models.PoliticianListItem": {
             "type": "object",
             "properties": {
+                "connection_count": {
+                    "type": "integer"
+                },
                 "id": {
                     "type": "string"
                 },

@@ -479,6 +479,7 @@ export function mockPoliticians(
   uf: string,
   page: number,
   pageSize: number,
+  sort: "connections" | "name" = "connections",
 ): PoliticianListResponse {
   const f = filter.toLowerCase().trim()
   const politicians = MOCK_GRAPH.nodes.filter((n) => n.type === "politician")
@@ -491,7 +492,14 @@ export function mockPoliticians(
     return true
   })
 
-  const sorted = [...filtered].sort((a, b) => a.label.localeCompare(b.label))
+  const degree = (id: string) =>
+    MOCK_GRAPH.edges.filter((e) => e.from === id || e.to === id).length
+
+  const sorted = [...filtered].sort((a, b) =>
+    sort === "connections"
+      ? degree(b.id) - degree(a.id) || a.label.localeCompare(b.label)
+      : a.label.localeCompare(b.label),
+  )
 
   const p = page < 1 ? 1 : page
   const size = pageSize < 1 ? 24 : pageSize
@@ -516,6 +524,7 @@ export function mockPoliticians(
       photo_attribution: props.photo_attribution,
       sanction_count: sanctionCount,
       proceeding_count: proceedingCount,
+      connection_count: degree(n.id),
     }
   })
 
