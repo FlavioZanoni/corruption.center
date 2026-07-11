@@ -599,11 +599,8 @@ func checkDisk(path string, minBytes uint64) error {
 func checkMemory(minBytes uint64) error {
 	available, ok := readMemAvailableLinux()
 	if !ok {
-		var m runtime.MemStats
-		runtime.ReadMemStats(&m)
-		if m.Sys > minBytes*4 {
-			return nil
-		}
+		// /proc/meminfo unavailable (non-Linux): we cannot know available
+		// memory, so don't block the import.
 		return nil
 	}
 	if available < minBytes {

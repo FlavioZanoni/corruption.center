@@ -22,7 +22,7 @@ func main() {
 	}
 	defer pg.Close()
 
-	mg, err := memgraph.New(ctx, mustEnv("MEMGRAPH_URI"), mustEnv("MEMGRAPH_USER"), mustEnv("MEMGRAPH_PASS"), pg, log)
+	mg, err := memgraph.New(ctx, mustEnv("MEMGRAPH_URI"), os.Getenv("MEMGRAPH_USER"), os.Getenv("MEMGRAPH_PASS"), pg, log)
 	if err != nil {
 		log.Error("failed to connect to memgraph", "err", err)
 		os.Exit(1)

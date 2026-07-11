@@ -49,7 +49,7 @@ func main() {
 		}
 		defer pg.Close()
 
-		mg, err := memgraph.New(ctx, mustEnv("MEMGRAPH_URI"), mustEnv("MEMGRAPH_USER"), mustEnv("MEMGRAPH_PASS"), pg, log)
+		mg, err := memgraph.New(ctx, mustEnv("MEMGRAPH_URI"), os.Getenv("MEMGRAPH_USER"), os.Getenv("MEMGRAPH_PASS"), pg, log)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "connect memgraph: %v\n", err)
 			os.Exit(1)
