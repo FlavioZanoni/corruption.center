@@ -30,6 +30,7 @@ type Repository interface {
 
 	// backoffice: scandal selector, provenance display and Person purge
 	ListScandals(ctx context.Context) ([]ScandalOption, error)
+	UpsertScandal(ctx context.Context, id, name, dateStart string) error
 	GetNodeProvenance(ctx context.Context, id string) (*NodeProvenance, error)
 	PurgePersonNode(ctx context.Context, id string) (*NodeProvenance, error)
 

@@ -22,7 +22,8 @@ PROBE_CASE="${DATAJUD_PROBE_CASE:-}"
 PROBE_TRIBUNAL="${DATAJUD_PROBE_TRIBUNAL:-}"
 
 if [ "$ENABLE_WRITES" = "true" ]; then
-  for key in MEMGRAPH_URI MEMGRAPH_USER MEMGRAPH_PASS; do
+  # MEMGRAPH_USER/PASS are optional (auth-less dev Memgraph)
+  for key in MEMGRAPH_URI; do
     eval value="\${$key-}"
     if [ -z "$value" ]; then
       echo "[datajud-watcher] missing env for write mode: $key" >&2

@@ -156,7 +156,7 @@ export default function PoliticiansBrowsePage() {
   }
 
   return (
-    <main className="min-h-screen bg-bg text-text">
+    <main className="h-screen overflow-y-auto bg-bg text-text">
       <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="flex items-center justify-between gap-4 mb-2">

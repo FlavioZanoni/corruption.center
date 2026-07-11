@@ -37,6 +37,25 @@ type ScandalOption struct {
 	Name string
 }
 
+// UpsertScandal merges a Scandal node by id. Name/date_start are set only on
+// create (an existing scandal is never renamed by a case registration); name
+// falls back to the id so the timeline always has something to render.
+func (db *DB) UpsertScandal(ctx context.Context, id, name, dateStart string) error {
+	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+	if strings.TrimSpace(name) == "" {
+		name = id
+	}
+	_, err := session.Run(ctx, `
+MERGE (s:Scandal {id: $id})
+ON CREATE SET s.name = $name, s.date_start = $date_start
+`, map[string]any{"id": id, "name": name, "date_start": dateStart})
+	if err != nil {
+		return fmt.Errorf("memgraph: upsert scandal: %w", err)
+	}
+	return nil
+}
+
 // ListScandals returns every Scandal node's id and name, ordered by name, for
 // the backoffice scandal selector.
 func (db *DB) ListScandals(ctx context.Context) ([]ScandalOption, error) {

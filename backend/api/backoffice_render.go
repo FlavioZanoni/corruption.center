@@ -165,6 +165,7 @@ func scandalSelector(scandals []memgraph.ScandalOption, selectedID, compact stri
 	}
 	b.WriteString(`</select>`)
 	b.WriteString(`<input name="new_scandal_id" placeholder="…or new scandal id (e.g. scandal_x)" class="` + newCls + `" />`)
+	b.WriteString(`<input name="scandal_name" placeholder="Scandal display name (new scandals only)" class="` + newCls + `" />`)
 	return b.String()
 }
 

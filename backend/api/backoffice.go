@@ -1,6 +1,7 @@
 package api
 
 import (
+	"time"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -67,7 +68,7 @@ func resolveTribunalEndpoint(c djenCaseCandidate) (string, error) {
 // manual seed flow and the DJEN approval flow: upsert the LegalProceeding node,
 // link it to the scandal, and record it in watcher_tracking. addedBy records
 // provenance ("backoffice" for manual seeds, "djen" for approved candidates).
-func (h *backofficeHandler) registerWatcherCase(ctx context.Context, caseNumber, tribunalEndpoint, scandalID, addedBy string) error {
+func (h *backofficeHandler) registerWatcherCase(ctx context.Context, caseNumber, tribunalEndpoint, scandalID, scandalName, addedBy string) error {
 	// Normalize to bare digits so a backoffice-seeded row (which may be typed in
 	// formatted CNJ form, "5046512-94.2016.4.04.7000") matches the exact 20-digit
 	// key the DJEN worker polls with (workers/djen normalizeCaseNumber). Without
@@ -83,6 +84,11 @@ func (h *backofficeHandler) registerWatcherCase(ctx context.Context, caseNumber,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create/update legal proceeding: %w", err)
+	}
+	// A freshly typed scandal id has no node yet — MERGE it so the
+	// INVESTIGATES edge (a MATCH) cannot silently no-op.
+	if err := h.server.memgraph.UpsertScandal(ctx, scandalID, scandalName, time.Now().Format("2006-01-02")); err != nil {
+		return fmt.Errorf("failed to create scandal: %w", err)
 	}
 	if err := h.server.memgraph.EnsureInvestigatesEdge(ctx, lpID, scandalID); err != nil {
 		return fmt.Errorf("failed to link proceeding to scandal: %w", err)
@@ -237,7 +243,7 @@ func (h *backofficeHandler) seedSubmit(c *gin.Context) {
 		return
 	}
 
-	if err := h.registerWatcherCase(c.Request.Context(), v.CaseNumber, v.TribunalEndpoint, v.ScandalID, "backoffice"); err != nil {
+	if err := h.registerWatcherCase(c.Request.Context(), v.CaseNumber, v.TribunalEndpoint, v.ScandalID, strings.TrimSpace(c.PostForm("scandal_name")), "backoffice"); err != nil {
 		v.Error = err.Error()
 		renderPage(c, "Seed DataJud case", seedCasePage(v))
 		return
@@ -441,7 +447,7 @@ func (h *backofficeHandler) approveDJENCandidate(c *gin.Context, item psql.Pendi
 		return
 	}
 
-	if err := h.registerWatcherCase(c.Request.Context(), caseNumber, endpoint, scandalID, "djen"); err != nil {
+	if err := h.registerWatcherCase(c.Request.Context(), caseNumber, endpoint, scandalID, "", "djen"); err != nil {
 		h.renderReviews(c, err.Error())
 		return
 	}
