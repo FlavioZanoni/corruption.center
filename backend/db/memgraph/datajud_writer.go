@@ -22,15 +22,19 @@ func (db *DB) UpsertLegalProceedingByCase(ctx context.Context, p DataJudProceedi
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
+	// Empty fields mean "unknown", not "clear it". Case registration (backoffice
+	// seed form, baseline seed) only ensures the node exists and has no facts to
+	// offer, so it must not reset court/status the watcher already derived — this
+	// upsert runs on every API boot for the baseline cases.
 	query := `
 MERGE (lp:LegalProceeding {case_number: $case_number})
-ON CREATE SET lp.id = $id
+ON CREATE SET lp.id = $id, lp.status = 'ongoing'
 SET
-  lp.court = $court,
-  lp.type = $type,
-  lp.status = $status,
-  lp.assuntos = $assuntos,
-  lp.date_filed = $date_filed
+  lp.court = CASE WHEN $court = '' THEN lp.court ELSE $court END,
+  lp.type = CASE WHEN $type = '' THEN lp.type ELSE $type END,
+  lp.status = CASE WHEN $status = '' THEN lp.status ELSE $status END,
+  lp.assuntos = CASE WHEN $assuntos IS NULL OR size($assuntos) = 0 THEN lp.assuntos ELSE $assuntos END,
+  lp.date_filed = CASE WHEN $date_filed IS NULL THEN lp.date_filed ELSE $date_filed END
 RETURN lp.id AS id
 `
 

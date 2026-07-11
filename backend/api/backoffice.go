@@ -77,10 +77,11 @@ func (h *backofficeHandler) registerWatcherCase(ctx context.Context, caseNumber,
 	if len(caseNumber) != 20 {
 		return fmt.Errorf("case_number must be 20 digits after stripping formatting, got %d digit(s)", len(caseNumber))
 	}
+	// Registration knows nothing about the case beyond its number: leave the
+	// fact-bearing fields empty so the upsert cannot overwrite what the DataJud
+	// watcher already derived (it defaults status to "ongoing" on create).
 	lpID, err := h.server.memgraph.UpsertLegalProceedingByCase(ctx, memgraph.DataJudProceedingUpsert{
 		CaseNumber: caseNumber,
-		Status:     "ongoing",
-		Type:       "criminal",
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create/update legal proceeding: %w", err)

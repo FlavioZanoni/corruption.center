@@ -30,6 +30,7 @@ func main() {
 	defer mg.Close(ctx)
 
 	server := api.NewApiServer(pg, mg)
+	server.SeedBaseline(ctx, log)
 	server.Start(getEnv("PORT", "8080"))
 }
 

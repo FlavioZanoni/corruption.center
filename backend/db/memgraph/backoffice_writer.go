@@ -56,6 +56,49 @@ ON CREATE SET s.name = $name, s.date_start = $date_start
 	return nil
 }
 
+// ScandalSeed is a fully-described Scandal written by the baseline seed
+// (api/seed.go). Unlike UpsertScandal — which only fills in a node a case
+// registration referenced — the seed owns these properties and rewrites them on
+// every boot, so correcting a description in code corrects it in the graph.
+type ScandalSeed struct {
+	ID           string
+	Name         string
+	Description  string
+	DateStart    string
+	DateEnd      string // empty = still open
+	Status       string
+	WikipediaURL string
+}
+
+// UpsertScandalSeed merges a Scandal node from the hardcoded baseline list.
+func (db *DB) UpsertScandalSeed(ctx context.Context, s ScandalSeed) error {
+	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	_, err := session.Run(ctx, `
+MERGE (s:Scandal {id: $id})
+SET s.name = $name,
+    s.description = $description,
+    s.date_start = $date_start,
+    s.date_end = CASE WHEN $date_end = '' THEN NULL ELSE $date_end END,
+    s.status = $status,
+    s.wikipedia_url = $wikipedia_url,
+    s.source = 'baseline_seed'
+`, map[string]any{
+		"id":            s.ID,
+		"name":          s.Name,
+		"description":   s.Description,
+		"date_start":    s.DateStart,
+		"date_end":      s.DateEnd,
+		"status":        s.Status,
+		"wikipedia_url": s.WikipediaURL,
+	})
+	if err != nil {
+		return fmt.Errorf("memgraph: upsert scandal seed %s: %w", s.ID, err)
+	}
+	return nil
+}
+
 // ListScandals returns every Scandal node's id and name, ordered by name, for
 // the backoffice scandal selector.
 func (db *DB) ListScandals(ctx context.Context) ([]ScandalOption, error) {
