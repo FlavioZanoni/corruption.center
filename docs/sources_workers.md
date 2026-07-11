@@ -1,5 +1,9 @@
 # Source and Worker definitions, schedules and responsibilities
 
+All sources are official government open-data services (TSE, Câmara, Senado,
+CNJ, CGU, TCU, Receita Federal via CNPJ.ws). No court front-end scraping, no
+third-party aggregators — see `docs/legal_compliance.md`.
+
 ---
 
 ## TSE CSV Import
@@ -7,8 +11,8 @@
 **Responsibility**
 Imports historical winners of federal elections from TSE bulk CSVs for election
 years 2002–2024. Creates `Politician` nodes with `active: false` — Câmara/Senado
-sync sets `active: true` for whoever holds a seat today. See `docs/TSE.md` for
-full details.
+sync sets `active: true` for whoever holds a seat today. See `docs/workerDetails/TSE.md`
+for full details.
 
 **Logic**
 
@@ -96,92 +100,27 @@ Weekly
 
 ---
 
-## DataJud Searcher
-
-**Responsibility**
-One-time search pass across all `Politician` and `Person` nodes to find their
-legal proceedings in all Brazilian courts. Seeds the `LegalProceeding` nodes
-and `DEFENDANT_IN` edges that `DataJud Watcher` will then track ongoing.
-
-**Logic**
-
-1. For each `Politician` / `Person` node not yet searched:
-   - Fan out concurrent searches to STF, STJ, TRF1–6 endpoints
-   - Query by full name + CPF (where available)
-   - Filter by `classeProcessual`: INQ, AP, APN, IPL, ACO (corruption-relevant classes)
-   - Filter by `assuntos` codes related to crimes against public administration
-2. For each matching case:
-   - Create `LegalProceeding` node if not exists (dedup by `case_number`)
-   - Store `assuntos` array on the node — used later for scandal cluster detection
-   - Create `DEFENDANT_IN` edge with current `outcome` from latest movement
-   - Register case with watcher tracking table in Postgres
-3. Follow `processoRelacionado` references — if a case links to another, ingest that too
-4. Flag cases where CPF matches are ambiguous → human review in backoffice
-
-**Auth**
-
-```txt
-headers = {
-  "Authorization": "ApiKey cDZHYzlZa0JadVREZDJCendFbzVlQTU2S3phNTYwdjAy",
-  "Content-Type": "application/json"
-}
-```
-
-**Docs**
-`https://datajud-wiki.cnj.jus.br/api-publica`
-
-**Format**
-JSON — Elasticsearch query DSL. Pagination via `search_after`.
-
-**Schedule**
-Manually triggered — run once after each politician import batch, then on demand for new nodes.
-
----
-
 ## DataJud Watcher
 
 **Responsibility**
-Keeps all known `LegalProceeding` nodes up to date by polling for new movements.
-Primary engine for keeping the graph live — discovers new defendants, updates
-conviction statuses, walks the full case tree from a root proceeding, and flags
-unlinked spinoff cases for human review.
+Keeps tracked `LegalProceeding` nodes up to date at the **case level** —
+status, phase, movement timeline. The public DataJud API does not expose
+parties or related-case references (Portaria CNJ 160/2020), so defendant
+discovery and per-defendant outcomes live in the DJEN worker and the
+backoffice review flow. Full details: `docs/workerDetails/DATAJUD.md`.
 
 **Logic**
 
-1. Load all tracked `LegalProceeding` nodes from Postgres watcher table
-2. For each case, query its tribunal endpoint with `numeroProcesso`
-3. Compare `movimentos` against last known movement ID stored in Postgres
-4. For each new movement:
-   - `Recebimento de denúncia` → update `DEFENDANT_IN.outcome` to `pending`
-   - `Condenação` → update to `convicted`
-   - `Absolvição` → update to `acquitted`
-   - `Prescrição` → update to `prescribed`, set `LegalProceeding.status` to `concluded`
-   - `Inclusão de parte` → extract CPF/CNPJ:
-     - CPF matches `Politician` exactly → new `DEFENDANT_IN` edge
-     - CNPJ matches `Organization` → new `DEFENDANT_IN` edge on org (org is a case defendant)
-     - CPF unknown → create `Person` node, flag for review
-     - CNPJ unknown → create `Organization` node (with CNPJ only), trigger `CNPJ Enricher`, flag for review
-   - `Desmembramento` → extract new case number → new `LegalProceeding` node,
-     inherit `INVESTIGATES` edge to same `Scandal`, register with watcher automatically
-5. On each poll also check `processoRelacionado` field:
-   - Any related case not yet tracked → ingest, inherit `INVESTIGATES` edge, register with watcher
-   - This walks the full case tree from the human-seeded root automatically
-
-**Case tree model**
-Each `Scandal` is seeded by a human with one root case number. The watcher walks
-`processoRelacionado` and `desmembramento` movements to discover the full tree
-automatically. The only gap is a genuinely new investigation with no reference
-back to the root — these are rare but must be manually added to the watcher
-tracking table via the backoffice.
+1. Load tracked cases from `watcher_tracking` (Postgres)
+2. `POST /{tribunal_endpoint}/_search` by `numeroProcesso`
+3. Skip if `nivelSigilo > 0`
+4. Diff `movimentos` against `last_movement_id`; apply case-level state
+   machine (recebimento/sentença/condenação flags, conclusão codes)
+5. Update tracking row
 
 **Auth**
-
-```txt
-headers = {
-  "Authorization": "ApiKey cDZHYzlZa0JadVREZDJCendFbzVlQTU2S3phNTYwdjAy",
-  "Content-Type": "application/json"
-}
-```
+`Authorization: APIKey $DATAJUD_API_KEY` — public key published at
+`https://datajud-wiki.cnj.jus.br/api-publica/acesso/`; rotates, never hardcode.
 
 **Docs**
 `https://datajud-wiki.cnj.jus.br/api-publica`
@@ -190,9 +129,74 @@ headers = {
 JSON — Elasticsearch query DSL
 
 **Schedule**
+Active cases daily, concluded weekly. ≤ 60 req/min (hard ToU cap: 120).
 
-- Active proceedings (`status: ongoing`): daily
-- Concluded proceedings (`status: concluded`): weekly (late movements still appear)
+---
+
+## DJEN Party Discovery
+
+**Responsibility**
+Discovers **parties of tracked cases** and **new cases for tracked people**
+from the Diário de Justiça Eletrônico Nacional — the CNJ's official national
+gazette API (public, keyless). Names only (no CPF/CNPJ), so every Politician
+link goes through `pending_review`. Full details: `docs/workerDetails/DJEN.md`.
+
+**Logic**
+
+1. Case mode: `GET /api/v1/comunicacao?numeroProcesso=...` per tracked case →
+   party roster from `destinatarios[]` (nome + polo) → Person nodes with
+   `DEFENDANT_IN` (outcome `cited`); Politician name hits → `pending_review`
+2. Name mode: `GET /api/v1/comunicacao?nomeParte=...` per politician + alias →
+   candidate case numbers filtered by criminal/improbidade classes →
+   `pending_review` (`djen_case_candidate`); approval registers the case in
+   `watcher_tracking`
+
+**Auth**
+None
+
+**Docs**
+`https://comunicaapi.pje.jus.br/` (Swagger) — gazette UI at `https://comunica.pje.jus.br/`
+
+**Format**
+JSON
+
+**Schedule**
+Case mode daily (active) / weekly (concluded); name mode weekly. Coverage
+starts ~2023 — historical cases need manual seeding.
+
+---
+
+## Sanctions Sync (Portal da Transparência + TCU)
+
+**Responsibility**
+Ingests official punishment registries — CPF/CNPJ-keyed, deterministic. Creates
+`Sanction` nodes and `SANCTIONED_IN` edges. The authoritative "actually
+punished" layer. Full details: `docs/workerDetails/SANCTIONS.md`.
+
+**Logic**
+
+1. CGU: paginate `GET api.portaldatransparencia.gov.br/api-de-dados/{ceis,cnep,ceaf,acordos-leniencia}`
+2. TCU: download CSVs from `sites.tcu.gov.br/dados-abertos/inidoneos-irregulares/`
+3. Full CPF/CNPJ → deterministic edge; masked CPF politician hit →
+   `pending_review`; name-only → `pending_review`
+4. New CNPJs → trigger CNPJ Enricher
+
+**Auth**
+CGU: free API key (`chave-api-dados` header). TCU: none.
+
+**Docs**
+`https://api.portaldatransparencia.gov.br/swagger-ui/index.html` ·
+`https://sites.tcu.gov.br/dados-abertos/`
+
+**Format**
+JSON (CGU), CSV (TCU)
+
+**Schedule**
+Weekly. CGU rate limit 90 req/min.
+
+**Deferred**: CNJ CNCIAI (improbidade convictions) — best conviction source,
+but API access requires an institutional request (Portaria CNJ 94). Request
+alongside the CNJ notification; do not scrape the public form.
 
 ---
 
@@ -206,7 +210,10 @@ Also extracts QSA (Quadro de Sócios e Administradores) board members, creates
 **Logic**
 
 1. Load all `Organization` nodes missing enrichment data from Memgraph
-2. For each org `GET https://publica.cnpj.ws/cnpj/{cnpj}`
+2. For each org `GET {CNPJ_API_BASE}/{cnpj}` — default provider is
+   [minha receita](https://docs.minhareceita.org/) (official Receita Federal
+   open data; self-hostable to remove rate limits entirely). The old
+   publica.cnpj.ws provider was dropped: 3 req/min is unusable at scale.
 3. Update `Organization` node:
    - `name` ← razão social
    - `active` ← `situação: Ativa` → true, `Baixada/Suspensa` → false
@@ -230,14 +237,49 @@ Also extracts QSA (Quadro de Sócios e Administradores) board members, creates
 None
 
 **Docs**
-`https://publica.cnpj.ws`
+`https://docs.minhareceita.org` — implementation details in `backend/workers/cnpj/README.md`
 
 **Format**
 JSON
 
 **Schedule**
-Triggered automatically when `DataJud Watcher` creates new `Organization` nodes.
-Also manually triggerable on demand.
+Weekly (enriches `Organization` nodes flagged un-enriched by DJEN/Sanctions/
+backoffice). Also manually triggerable on demand (`--cnpj` single-shot).
+
+---
+
+## Photos Enricher
+
+**Responsibility**
+Fills `photo_url` for `Politician` and `Organization` nodes using **hotlinks
+only** — no image bytes are ever stored or served by us (minimal server load).
+Never overwrites official Câmara/Senado photos.
+
+**Logic**
+
+1. TSE mode (historical politicians): map CPF → SQ_CANDIDATO via
+   `consulta_cand` CSVs, then hotlink the official TSE candidate photo.
+   Gated behind a pre-flight probe of `--tse-url-template`
+   (divulgacandcontas was under maintenance when built — activates once a
+   stable pattern is verified; see `backend/workers/photos/README.md`).
+2. Wikidata mode: Organizations matched deterministically via CNPJ
+   (property P6204) → **P18 image** (never P154 logo — legal constraint) →
+   Wikimedia Commons `Special:FilePath` hotlink + attribution string
+   (`photo_attribution`, rendered by the frontend — CC-BY-SA requires it).
+   Politicians without photos: pt.wikipedia exact-title match → P18;
+   ambiguous name matches are skipped, never guessed.
+
+**Auth**
+None
+
+**Docs**
+`https://www.wikidata.org/wiki/Property:P6204` · `backend/workers/photos/README.md`
+
+**Format**
+JSON (SPARQL/REST), CSV (TSE consulta_cand)
+
+**Schedule**
+Monthly. ≤ 1 req/s against Wikidata/Wikipedia.
 
 ---
 
@@ -295,57 +337,48 @@ flowchart TD
     HUMAN_ALIAS --> POL
   end
 
-  subgraph phase2["Phase 2 — Legal Proceedings"]
-    SEARCHER["DataJud Searcher\nonce per batch"]
-    LP[("LegalProceeding nodes\n+ assuntos stored")]
-    DEF["DEFENDANT_IN edges"]
-    WATCH_TBL[("watcher tracking\nPostgres")]
+  subgraph phase2["Phase 2 — Punishment Layer (deterministic)"]
+    SANC["Sanctions Sync\nCGU + TCU, weekly"]
+    SNODE[("Sanction nodes\n+ SANCTIONED_IN")]
 
-    POL --> SEARCHER
-    SEARCHER --> LP
-    SEARCHER --> DEF
-    SEARCHER --> WATCH_TBL
+    SANC -->|full CPF/CNPJ match| SNODE
+    SANC -->|masked CPF hit| HUMAN_SANC["👤 confirms sanction match"]
+    HUMAN_SANC --> SNODE
   end
 
   subgraph phase3["Phase 3 — Scandal Seeding"]
-    HUMAN_SCANDAL["👤 creates Scandal node\nseeds root case number"]
+    HUMAN_SCANDAL["👤 creates Scandal node\nseeds root case numbers\n+ historical defendant roster\n(cited to decision texts)"]
     SCANDAL[("Scandal nodes")]
-    INV["INVESTIGATES edge\n(root case)"]
 
     HUMAN_SCANDAL --> SCANDAL
-    HUMAN_SCANDAL --> INV
-    INV --> WATCH_TBL
+    HUMAN_SCANDAL -->|register cases| WATCH_TBL[("watcher_tracking")]
   end
 
-  subgraph phase4["Phase 4 — Case Tree Walking"]
-    WATCHER["DataJud Watcher\ndaily / weekly"]
-    LP2[("new LegalProceeding\nnodes")]
-    DEF2["new DEFENDANT_IN edges\n(Politician or Organization)"]
+  subgraph phase4["Phase 4 — Live Case Layer"]
+    WATCHER["DataJud Watcher\ncase-level status\ndaily / weekly"]
+    DJEN["DJEN Party Discovery\ncase mode + name mode"]
+    LP[("LegalProceeding nodes")]
+    PERSON[("Person nodes\noutcome: cited")]
     ORG[("Organization nodes")]
-    PERSON[("Person nodes")]
-    CNPJ["CNPJ Enricher\nauto-triggered"]
+    CNPJ["CNPJ Enricher"]
 
-    WATCHER -->|processoRelacionado\ndesmembramento| LP2
-    LP2 -->|inherits| SCANDAL
-    LP2 --> WATCH_TBL
-    WATCHER -->|CPF matched exactly| DEF2
-    WATCHER -->|CNPJ found in partes| ORG
+    WATCH_TBL --> WATCHER
+    WATCHER -->|status, phase, timeline| LP
+    WATCH_TBL --> DJEN
+    DJEN -->|party roster\nname only| PERSON
+    DJEN -->|politician name hit| HUMAN_DJEN["👤 confirms party match\nsets DEFENDANT_IN.outcome"]
+    DJEN -->|new case candidates| HUMAN_CASE["👤 approves case\n→ watcher_tracking"]
+    HUMAN_CASE --> WATCH_TBL
     ORG --> CNPJ
-    CNPJ --> PERSON
-    CNPJ -->|CONTROLS edges| ORG
-    CNPJ -->|OWNED_BY edges\nshell chains| ORG
-    CNPJ -->|possible_politician_in_qsa| HUMAN_CPF["👤 confirms or rejects\npossible politician match"]
-    HUMAN_CPF -->|confirmed| DEF2
-    WATCHER -->|unknown CPF| HUMAN_PERSON["👤 reviews\nnew Person node"]
-    WATCHER -->|unlinked spinoff| HUMAN_SEED["👤 manually seeds\nnew case number"]
-    HUMAN_SEED --> WATCH_TBL
+    CNPJ -->|CONTROLS / OWNED_BY| ORG
+    CNPJ -->|possible_politician_in_qsa| HUMAN_QSA["👤 confirms QSA match"]
   end
 
   subgraph phase5["Phase 5 — Ongoing"]
-    CAM2["Câmara Sync\nweekly"] -->|role/party updates| POL
-    SEN2["Senado Sync\nweekly"] -->|role/party updates| POL
-    WATCHER2["DataJud Watcher\ndaily"] -->|status updates| DEF2
-    WATCHER2 -->|new movements| LP2
+    CAM2["Câmara Sync weekly"] --> POL
+    SEN2["Senado Sync weekly"] --> POL
+    WATCHER2["DataJud Watcher daily"] --> LP
+    SANC2["Sanctions Sync weekly"] --> SNODE
   end
 
   phase1 --> phase2

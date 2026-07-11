@@ -17,7 +17,7 @@ A visible contact page or footer link on the site with:
 This is the most important legal protection. It must clearly explain:
 
 1. **What the project is** — a transparency tool built exclusively from official Brazilian public records for public interest accountability purposes (LGPD art. 23)
-2. **Where every data type comes from** — list each source (Câmara, Senado, TSE, DataJud/CNJ, Receita Federal via CNPJ.ws) with links
+2. **Where every data type comes from** — list each source (Câmara, Senado, TSE, DataJud/CNJ, DJEN/CNJ, Portal da Transparência/CGU, TCU, Receita Federal via CNPJ.ws) with links — all official government open-data services; the project never scrapes court front-ends or third-party aggregators
 3. **What "pending confirmation" means** — explain that links between private individuals and politicians are never created automatically, always require human review before being displayed
 4. **How to request removal** — direct link to contact, explain the process
 5. **Limitations disclaimer** — data reflects official records and may contain errors from the source; the project does not add or infer information beyond what official records state

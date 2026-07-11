@@ -5,9 +5,10 @@
 A system for mapping, visualizing, and exploring corruption scandals in Brazil
 and their connections to politicians, organizations, and legal proceedings.
 
-Data is ingested from official public datasets (TSE, Câmara, Senado, CNJ DataJud),
-normalized via deterministic pipelines (CPF/CNPJ-based identity), stored in a
-graph database, and served through an interactive graph visualization ([d3-force](https://d3js.org/d3-force)).
+Data is ingested from official public datasets (TSE, Câmara, Senado, CNJ
+DataJud, CNJ DJEN, CGU Portal da Transparência, TCU), normalized via
+deterministic pipelines (CPF/CNPJ-based identity), stored in a graph database,
+and served through an interactive graph visualization ([d3-force](https://d3js.org/d3-force)).
 
 ---
 
@@ -16,7 +17,7 @@ graph database, and served through an interactive graph visualization ([d3-force
 ```txt
 ┌─────────────────────────────────────────────────────────────────┐
 │                        DATA SOURCES                             │
-│      TSE · Câmara · Senado · DataJud · CNPJ WS API              │
+│  TSE · Câmara · Senado · DataJud · DJEN · CGU · TCU · CNPJ WS   │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
                             ▼
@@ -47,7 +48,8 @@ graph database, and served through an interactive graph visualization ([d3-force
 │  · pending_aliases           │     │  · Organization (CNPJ)           │
 │  · audit_log                 │     │  · LegalProceeding               │
 │  · tse_import_log            │     │  · Scandal                       │
-│  · schema_migrations         │     │  · Source                        │
+│  · schema_migrations         │     │  · Sanction                      │
+│                              │     │  · Source                        │
 │                              │     │                                  │
 │                              │     │  Edges:                          │
 │                              │     │  · DEFENDANT_IN                  │
@@ -57,6 +59,7 @@ graph database, and served through an interactive graph visualization ([d3-force
 │                              │     │  · CONTROLS                      │
 │                              │     │  · OWNED_BY                      │
 │                              │     │  · RELATED_TO                    │
+│                              │     │  · SANCTIONED_IN                 │
 │                              │     │  · SUPPORTS                      │
 └──────────────┬───────────────┘     └──────────────┬───────────────────┘
                │                                    │
@@ -146,33 +149,40 @@ Output:
 
 ---
 
-### 4. DataJud Searcher (Batch Seeder)
+### 4. DataJud Watcher (Case Status Engine)
 
-* First pass across all people
-* Creates:
-  * `LegalProceeding` nodes
-  * `DEFENDANT_IN` edges
-* Registers cases in **watcher tracking table**
-
----
-
-### 5. DataJud Watcher (Core Engine)
-
-Continuously updates legal graph:
+Keeps tracked cases current at the **case level** (the public API exposes no
+party data — Portaria CNJ 160/2020):
 
 * Tracks new movements
-* Updates outcomes:
-  * pending / convicted / acquitted / prescribed
-* Discovers:
-  * new defendants (CPF/CNPJ)
-  * new cases (desmembramento)
-  * related cases (processoRelacionado)
-
-Automatically expands the **case tree of a scandal**
+* Updates case status/phase (accepted / sentenced / concluded)
+* Per-defendant outcomes are set only via backoffice review
 
 ---
 
-### 6. CNPJ Enricher
+### 5. DJEN Party Discovery (Party Engine)
+
+Official CNJ national gazette API (public, keyless):
+
+* Case mode: party rosters (`destinatarios`, name + polo) for tracked cases
+* Name mode: candidate case numbers for tracked politicians + aliases
+* Names only — every Politician link requires human review
+* Coverage: communications since ~2023; historical rosters are manually seeded
+
+---
+
+### 6. Sanctions Sync (Punishment Layer)
+
+Official CPF/CNPJ-keyed registries — deterministic matching:
+
+* CGU Portal da Transparência: CEIS, CNEP, CEAF, leniency agreements
+* TCU: irregular accounts, inabilitados, inidôneos
+* Creates `Sanction` nodes + `SANCTIONED_IN` edges
+* CNJ CNCIAI deferred pending institutional API access (Portaria 94)
+
+---
+
+### 7. CNPJ Enricher
 
 * Resolves organizations from CNPJ
 
@@ -187,7 +197,7 @@ Automatically expands the **case tree of a scandal**
 
 ---
 
-### 7. Alias Extractor
+### 8. Alias Extractor
 
 Hybrid system:
 
@@ -250,6 +260,7 @@ This builds **complete investigation trees over time**
 * `Organization` (CNPJ unique)
 * `LegalProceeding` (case_number unique)
 * `Scandal` (manually seeded)
+* `Sanction` (registry + entry id unique — CEIS/CNEP/CEAF/TCU records)
 * `Source` (external reference / provenance)
 
 ---
@@ -269,6 +280,7 @@ This builds **complete investigation trees over time**
 * OWNED_BY → organization → organization
 * RELATED_TO → same-type relationships only:
   * scandal ↔ scandal
+* SANCTIONED_IN → person/politician/org → sanction (deterministic CPF/CNPJ match, or human-confirmed)
 * SUPPORTS → source → node/edge
 
 ---
@@ -276,15 +288,16 @@ This builds **complete investigation trees over time**
 ## Scandal Model
 
 * Created manually
-* Seeded with **one root case**
-* Watcher expands automatically
+* Seeded with root case number(s) + historical defendant roster (cited to
+  official decision texts)
+* DJEN name mode surfaces additional case candidates for review
 
 ```txt
 Scandal
-  └── root LegalProceeding
-         ├── related cases → via `processoRelacionado` on DataJud
-         ├── split cases → via `desmembramento` on DataJud
-         └── defendants
+  └── root LegalProceeding(s)   (manually seeded)
+         ├── status/timeline    → DataJud Watcher (case-level)
+         ├── party roster       → DJEN case mode (recent cases)
+         └── new case candidates → DJEN name mode → 👤 review
 ```
 
 ### Identity Rules
