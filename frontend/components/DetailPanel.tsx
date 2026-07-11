@@ -224,6 +224,56 @@ function edgeStatusColor(properties: Record<string, unknown>): string {
   }
 }
 
+// How a link between a person and a case/sanction came to exist. Official
+// sources publish names, and often mask documents, so tying a record to a
+// specific politician is an inference — the reader is told which one it was and
+// how strong the evidence behind it is (backend: package matching).
+const CONFIDENCE_SIGNAL_LABELS: Record<string, string> = {
+  full_document: "CPF/CNPJ completo na fonte",
+  masked_cpf_middle6: "CPF parcial da fonte confere",
+  exact_name: "nome idêntico",
+  long_name: "nome completo (4+ partes)",
+  ambiguous_match: "evidência serve a mais de uma pessoa",
+};
+
+function ProvenanceBadge({ properties }: { properties: Record<string, unknown> }) {
+  const source = properties.source as string | undefined;
+  if (source === "backoffice_review") {
+    return (
+      <span
+        className="mt-1.5 inline-block text-[9px] font-mono uppercase tracking-wider text-[#7aa87a]"
+        title="Vínculo criado por revisão humana a partir de registro oficial."
+      >
+        ✓ Confirmado por revisão humana
+      </span>
+    );
+  }
+
+  const confidence = properties.confidence as number | undefined;
+  if (typeof confidence !== "number") return null;
+
+  const signals = Array.isArray(properties.confidence_signals)
+    ? (properties.confidence_signals as string[])
+    : [];
+  const reasons = signals
+    .map((s) => CONFIDENCE_SIGNAL_LABELS[s] ?? s)
+    .join(" · ");
+
+  return (
+    <span
+      className="mt-1.5 inline-block text-[9px] font-mono uppercase tracking-wider text-text-muted"
+      title={
+        reasons
+          ? `Identificação automática. Evidência: ${reasons}.`
+          : "Identificação automática a partir de registro oficial."
+      }
+    >
+      Identificação: {Math.round(confidence * 100)}%
+      {reasons ? ` · ${reasons}` : ""}
+    </span>
+  );
+}
+
 function PropRow({
   label,
   value,
@@ -317,6 +367,7 @@ function ConnectedNodeItem({
             )}
           </div>
         )}
+        <ProvenanceBadge properties={edge.properties} />
       </div>
     </button>
   );

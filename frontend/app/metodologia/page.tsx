@@ -159,33 +159,69 @@ export default function MetodologiaPage() {
 
         {/* 3 — Pendente de confirmação */}
         <SectionTitle n="03">
-          O que significa “pendente de confirmação”
+          Como identificamos uma pessoa (e o índice de identificação)
         </SectionTitle>
         <div className="space-y-4 text-text-muted">
           <p>
-            Vínculos entre pessoas físicas privadas e políticos{" "}
-            <strong className="text-text">nunca são criados
-            automaticamente</strong>. Quando um processo automatizado identifica
-            uma possível correspondência (por exemplo, um nome semelhante ao de
-            um político no quadro societário de uma empresa), essa
-            correspondência entra em uma <strong className="text-text">fila de
-            revisão humana</strong> e não é exibida como um vínculo confirmado.
+            As fontes oficiais são confiáveis quanto{" "}
+            <strong className="text-text">ao que aconteceu</strong>, mas com
+            frequência silenciam quanto a{" "}
+            <strong className="text-text">com quem aconteceu</strong>. O DJEN
+            publica nomes de partes sem nenhum documento; a CGU divulga o CPF
+            mascarado (<span className="font-mono">***.435.151-**</span>). Ligar
+            um registro a um político específico é, portanto, uma inferência
+            nossa — e não um fato afirmado pela fonte. Homônimos são abundantes:
+            uma única busca por um nome comum no DJEN retorna milhares de
+            publicações de pessoas distintas.
           </p>
           <p>
-            Um vínculo só passa a ser apresentado após{" "}
-            <strong className="text-text">revisão e aprovação manual de uma
-            pessoa</strong>. Até lá, qualquer nó ou conexão ainda não confirmado
-            é exibido com o rótulo
-            <span className="mx-1 rounded border border-accent-yellow px-1.5 py-0.5 font-mono text-xs text-accent-yellow">
-              não confirmado — em revisão
-            </span>
-            e não deve ser interpretado como uma afirmação de fato.
+            Por isso cada vínculo carrega um{" "}
+            <strong className="text-text">índice de identificação</strong>, que
+            pondera as evidências e determina como o vínculo é criado:
+          </p>
+          <ul className="ml-5 list-disc space-y-2">
+            <li>
+              <strong className="text-text">CPF ou CNPJ completo na fonte</strong>{" "}
+              (100%) — identificação determinística. O vínculo é criado
+              automaticamente.
+            </li>
+            <li>
+              <strong className="text-text">
+                CPF parcial da fonte + nome idêntico
+              </strong>{" "}
+              (95%) — o vínculo é criado automaticamente, exibindo as evidências.
+            </li>
+            <li>
+              <strong className="text-text">
+                Apenas o nome, sem nenhum documento
+              </strong>{" "}
+              (no máximo 35%) — <strong className="text-text">nunca</strong> gera
+              vínculo automático. Vai para uma{" "}
+              <strong className="text-text">fila de revisão humana</strong> e só
+              é exibido após aprovação manual. Um nome, por mais exato que seja,
+              é uma pista — jamais uma identificação.
+            </li>
+          </ul>
+          <p>
+            O limite para criação automática é de 90%, calibrado de modo que{" "}
+            <strong className="text-text">
+              nenhuma combinação de evidências baseadas apenas em nome consiga
+              alcançá-lo
+            </strong>
+            . Evidência que sirva a mais de uma pessoa é rebaixada e enviada para
+            revisão humana.
           </p>
           <p>
-            Toda informação confirmada exibe a{" "}
-            <strong className="text-text">fonte oficial de origem</strong> — um
-            número de processo do DataJud, um registro de API da Câmara, uma
+            Cada vínculo exibe como foi estabelecido — “identificação: 95%”, com
+            as evidências, ou “confirmado por revisão humana” — além da{" "}
+            <strong className="text-text">fonte oficial de origem</strong>: um
+            número de processo do DataJud, um registro da API da Câmara, uma
             sanção do Portal da Transparência, e assim por diante.
+          </p>
+          <p>
+            Registrar um <em>processo</em> para acompanhamento não afirma nada
+            sobre nenhuma pessoa e é feito automaticamente. A afirmação “este
+            político é réu neste processo” é que depende das regras acima.
           </p>
         </div>
 
