@@ -31,7 +31,11 @@ func (db *DB) QuerySearch(ctx context.Context, q string, nodeType string) (*mode
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
-	params := map[string]any{"q": foldQuery(q)}
+	folded := foldQuery(q)
+	params := map[string]any{
+		"q":        folded,
+		"q_digits": digitsOnly(folded),
+	}
 
 	var query string
 	switch nodeType {
@@ -45,6 +49,8 @@ func (db *DB) QuerySearch(ctx context.Context, q string, nodeType string) (*mode
 		query = searchOrganizationsQuery()
 	case "sanction":
 		query = searchSanctionsQuery()
+	case "legal_proceeding":
+		query = searchProceedingsQuery()
 	default:
 		// no type filter: search all
 		query = searchAllQuery()
@@ -113,7 +119,32 @@ func searchSanctionsQuery() string {
 		foldExpr(`coalesce(node.process_ref, "")`))
 }
 
+func searchProceedingsQuery() string {
+	// Case numbers are stored as bare 20 digits (e.g., "50833760520144047000")
+	// but humans type the formatted CNJ version with dots and hyphens
+	// (e.g., "5083376-05.2014.4.04.7000") or a partial number.
+	// To find a match either way, if the query contains mostly digits,
+	// strip separators from both and compare; otherwise use normal folding.
+	caseNorm := "replace(replace(node.case_number, '-', ''), '.', '')"
+	return fmt.Sprintf(`
+    MATCH (node:LegalProceeding)
+    WHERE (
+      ($q_digits <> '' AND %s CONTAINS $q_digits)
+      OR %s CONTAINS $q
+      OR %s CONTAINS $q
+      OR %s CONTAINS $q
+    )
+    RETURN node
+    LIMIT 20
+  `,
+		caseNorm,
+		foldExpr("node.case_number"),
+		foldExpr("node.class_name"),
+		foldExpr("node.court"))
+}
+
 func searchAllQuery() string {
+	caseNorm := "replace(replace(node.case_number, '-', ''), '.', '')"
 	return fmt.Sprintf(`
     MATCH (node)
     WHERE (
@@ -122,6 +153,12 @@ func searchAllQuery() string {
       OR (node:Scandal AND (%s CONTAINS $q OR ANY(alias IN coalesce(node.aliases, []) WHERE %s CONTAINS $q)))
       OR (node:Organization AND %s CONTAINS $q)
       OR (node:Sanction AND (%s CONTAINS $q OR %s CONTAINS $q OR %s CONTAINS $q))
+      OR (node:LegalProceeding AND (
+        ($q_digits <> '' AND %s CONTAINS $q_digits)
+        OR %s CONTAINS $q
+        OR %s CONTAINS $q
+        OR %s CONTAINS $q
+      ))
     )
     RETURN node
     LIMIT 20
@@ -132,5 +169,9 @@ func searchAllQuery() string {
 		foldExpr("node.name"),
 		foldExpr(`coalesce(node.registry, "")`),
 		foldExpr(`coalesce(node.organ, "")`),
-		foldExpr(`coalesce(node.sanction_type, "")`))
+		foldExpr(`coalesce(node.sanction_type, "")`),
+		caseNorm,
+		foldExpr("node.case_number"),
+		foldExpr("node.class_name"),
+		foldExpr("node.court"))
 }

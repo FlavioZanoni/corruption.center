@@ -17,11 +17,11 @@ func NewSearchHandler(service services.SearchService) *SearchHandler {
 
 // Search godoc
 // @Summary      Full-text search
-// @Description  Search across politicians, persons, scandals, organizations and sanctions
+// @Description  Search across politicians, persons, scandals, organizations, sanctions and legal proceedings
 // @Tags         search
 // @Produce      json
 // @Param        q     query     string  true   "Search query"
-// @Param        type  query     string  false  "Node type filter: politician|person|scandal|organization|sanction"
+// @Param        type  query     string  false  "Node type filter: politician|person|scandal|organization|sanction|legal_proceeding"
 // @Success      200   {object}  models.GraphResponse
 // @Failure      400   {object}  models.ErrorResponse
 // @Failure      500   {object}  models.ErrorResponse

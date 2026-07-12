@@ -17,8 +17,13 @@ type GraphService interface {
 	GetScandal(ctx context.Context, id string) (*models.Scandal, error)
 	ListPoliticians(ctx context.Context, filter, party, uf, sort string, page, pageSize int) (*models.PoliticianListResponse, error)
 	ListScandals(ctx context.Context, sort string, page, pageSize int) (*models.ScandalListResponse, error)
-	ListProceedings(ctx context.Context, page, pageSize int) (*models.ProceedingListResponse, error)
+	ListProceedings(ctx context.Context, court, hasConviction, q, sort string, page, pageSize int) (*models.ProceedingListResponse, error)
 	GetProceeding(ctx context.Context, id string) (*models.ProceedingDetailResponse, error)
+	GetSanction(ctx context.Context, id string) (*models.SanctionDetailResponse, error)
+	ListSanctions(ctx context.Context, registry, organ, q, sort string, page, pageSize int) (*models.SanctionListResponse, error)
+	GetSanctionRegistries(ctx context.Context) (*models.SanctionRegistriesResponse, error)
+	GetPerson(ctx context.Context, id string) (*models.PersonProfileResponse, error)
+	GetOrganization(ctx context.Context, id string) (*models.OrganizationProfileResponse, error)
 }
 
 type graphService struct {
@@ -61,10 +66,30 @@ func (s *graphService) ListScandals(ctx context.Context, sort string, page, page
 	return s.memgraph.QueryScandals(ctx, sort, page, pageSize)
 }
 
-func (s *graphService) ListProceedings(ctx context.Context, page, pageSize int) (*models.ProceedingListResponse, error) {
-	return s.memgraph.QueryProceedings(ctx, page, pageSize)
+func (s *graphService) ListProceedings(ctx context.Context, court, hasConviction, q, sort string, page, pageSize int) (*models.ProceedingListResponse, error) {
+	return s.memgraph.QueryProceedings(ctx, court, hasConviction, q, sort, page, pageSize)
 }
 
 func (s *graphService) GetProceeding(ctx context.Context, id string) (*models.ProceedingDetailResponse, error) {
 	return s.memgraph.QueryProceeding(ctx, id)
+}
+
+func (s *graphService) GetSanction(ctx context.Context, id string) (*models.SanctionDetailResponse, error) {
+	return s.memgraph.QuerySanction(ctx, id)
+}
+
+func (s *graphService) ListSanctions(ctx context.Context, registry, organ, q, sort string, page, pageSize int) (*models.SanctionListResponse, error) {
+	return s.memgraph.QuerySanctions(ctx, registry, organ, q, sort, page, pageSize)
+}
+
+func (s *graphService) GetSanctionRegistries(ctx context.Context) (*models.SanctionRegistriesResponse, error) {
+	return s.memgraph.QuerySanctionRegistries(ctx)
+}
+
+func (s *graphService) GetPerson(ctx context.Context, id string) (*models.PersonProfileResponse, error) {
+	return s.memgraph.QueryPerson(ctx, id)
+}
+
+func (s *graphService) GetOrganization(ctx context.Context, id string) (*models.OrganizationProfileResponse, error) {
+	return s.memgraph.QueryOrganization(ctx, id)
 }

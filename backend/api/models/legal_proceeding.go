@@ -38,6 +38,7 @@ type ProceedingListItem struct {
 	Phase         string           `json:"phase"`
 	HasConviction bool             `json:"has_conviction"`
 	Type          ProceedingType   `json:"type"`
+	Polled        bool             `json:"polled"` // true when has_conviction IS NOT NULL; false means we never polled DataJud
 }
 
 // ProceedingListResponse is the paginated envelope for GET /proceedings.

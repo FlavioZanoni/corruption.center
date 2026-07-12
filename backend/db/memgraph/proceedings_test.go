@@ -55,6 +55,116 @@ func TestProceedingListItemFromPropsSparse(t *testing.T) {
 	}
 }
 
+// TestProceedingListItemPolledField verifies that the Polled field correctly
+// distinguishes between "never polled by DataJud" (has_conviction is NULL/absent)
+// and "polled and no conviction found" (has_conviction = false).
+// This is critical because the UI must tell the user: "we checked and found no
+// conviction" vs "we haven't checked this case yet" — the absence of a field is
+// not "false", it means we don't know.
+func TestProceedingListItemPolledField(t *testing.T) {
+	tests := []struct {
+		name          string
+		props         map[string]any
+		expectedPolled bool
+		expectedConviction bool
+	}{
+		{
+			name: "polled with conviction: Polled=true, HasConviction=true",
+			props: map[string]any{
+				"id":             "lp_conv_true",
+				"case_number":    "0001111-11.2020.8.26.0100",
+				"has_conviction": true,
+			},
+			expectedPolled: true,
+			expectedConviction: true,
+		},
+		{
+			name: "polled without conviction: Polled=true, HasConviction=false",
+			props: map[string]any{
+				"id":             "lp_conv_false",
+				"case_number":    "0002222-22.2020.8.26.0100",
+				"has_conviction": false,
+			},
+			expectedPolled: true,
+			expectedConviction: false,
+		},
+		{
+			name: "never polled (absent): Polled=false, HasConviction=false",
+			props: map[string]any{
+				"id":          "lp_never_polled",
+				"case_number": "0003333-33.2020.8.26.0100",
+				// has_conviction is absent (not in props at all)
+			},
+			expectedPolled: false,
+			expectedConviction: false,
+		},
+		{
+			name: "never polled (explicit nil): Polled=false, HasConviction=false",
+			props: map[string]any{
+				"id":             "lp_explicit_nil",
+				"case_number":    "0004444-44.2020.8.26.0100",
+				"has_conviction": nil,
+			},
+			expectedPolled: false,
+			expectedConviction: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item := proceedingListItemFromProps(tt.props)
+			if item.Polled != tt.expectedPolled {
+				t.Errorf("Polled = %v, want %v", item.Polled, tt.expectedPolled)
+			}
+			if item.HasConviction != tt.expectedConviction {
+				t.Errorf("HasConviction = %v, want %v", item.HasConviction, tt.expectedConviction)
+			}
+		})
+	}
+}
+
+// TestProceedingOrderBy verifies that the proceedingOrderBy function correctly
+// maps sort parameters to Cypher ORDER BY clauses with an allowlist pattern.
+// This is critical for pagination: a non-deterministic order would let rows
+// straddle a page boundary and go permanently unlisted.
+func TestProceedingOrderBy(t *testing.T) {
+	tests := []struct {
+		name     string
+		sort     string
+		expected string
+	}{
+		{
+			name:     "default sort (empty string)",
+			sort:     "",
+			expected: "lp.case_number",
+		},
+		{
+			name:     "case_number sort",
+			sort:     "case_number",
+			expected: "lp.case_number",
+		},
+		{
+			name:     "court sort",
+			sort:     "court",
+			expected: "lp.court, lp.case_number",
+		},
+		{
+			name:     "invalid sort falls back to default",
+			sort:     "invalid_sort_key",
+			expected: "lp.case_number",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := proceedingOrderBy(tt.sort)
+			if result != tt.expected {
+				t.Errorf("proceedingOrderBy(%q) = %q, want %q", tt.sort, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestDefendantFromNode(t *testing.T) {
 	def := defendantFromNode(
 		[]string{"Politician"},

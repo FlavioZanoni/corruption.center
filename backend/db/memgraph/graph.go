@@ -257,7 +257,7 @@ func neoNodeToModel(n neo4j.Node) models.Node {
 		ID:         id,
 		Type:       labelToNodeType(label),
 		Label:      name,
-		Properties: n.Props,
+		Properties: SanitizeProperties(n.Props),
 	}
 }
 
@@ -277,7 +277,7 @@ func neoRelToModel(r neo4j.Relationship, elementToDomainID map[string]string) mo
 		From:       from,
 		To:         to,
 		Type:       models.EdgeType(r.Type),
-		Properties: r.Props,
+		Properties: SanitizeProperties(r.Props),
 	}
 }
 

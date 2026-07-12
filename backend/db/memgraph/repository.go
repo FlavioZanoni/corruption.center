@@ -34,8 +34,13 @@ type Repository interface {
 	// browse
 	QueryPoliticians(ctx context.Context, filter, party, uf, sort string, page, pageSize int) (*models.PoliticianListResponse, error)
 	QueryScandals(ctx context.Context, sort string, page, pageSize int) (*models.ScandalListResponse, error)
-	QueryProceedings(ctx context.Context, page, pageSize int) (*models.ProceedingListResponse, error)
+	QueryProceedings(ctx context.Context, court, hasConviction, q, sort string, page, pageSize int) (*models.ProceedingListResponse, error)
 	QueryProceeding(ctx context.Context, id string) (*models.ProceedingDetailResponse, error)
+	QuerySanctions(ctx context.Context, registry, organ, q, sort string, page, pageSize int) (*models.SanctionListResponse, error)
+	QuerySanction(ctx context.Context, id string) (*models.SanctionDetailResponse, error)
+	QuerySanctionRegistries(ctx context.Context) (*models.SanctionRegistriesResponse, error)
+	QueryPerson(ctx context.Context, id string) (*models.PersonProfileResponse, error)
+	QueryOrganization(ctx context.Context, id string) (*models.OrganizationProfileResponse, error)
 
 	// backoffice writes
 	UpsertLegalProceedingByCase(ctx context.Context, p DataJudProceedingUpsert) (string, error)

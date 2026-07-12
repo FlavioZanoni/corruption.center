@@ -10,9 +10,28 @@ import (
 
 const defaultProceedingPageSize = 24
 
+// proceedingOrderBy maps a caller-supplied sort mode onto an ORDER BY clause.
+// ORDER BY cannot be parameterized, so the clause is inlined; allowlist
+// is the only thing standing between a query string and Cypher injection.
+func proceedingOrderBy(sort string) string {
+	if sort == "court" {
+		return "lp.court, lp.case_number"
+	}
+	// Default: case_number (deterministic order for pagination)
+	return "lp.case_number"
+}
+
 // proceedingListItemFromProps maps a LegalProceeding node's properties onto a
-// browse row.
+// browse row. Polled is true when has_conviction IS NOT NULL (we have polled DataJud),
+// false when has_conviction is NULL (we have not polled it yet).
 func proceedingListItemFromProps(p map[string]any) models.ProceedingListItem {
+	// has_conviction field: can be NULL (never polled), true, or false
+	// Polled should be true only when has_conviction is NOT NULL
+	polled := false
+	if v, ok := p["has_conviction"]; ok && v != nil {
+		polled = true
+	}
+
 	return models.ProceedingListItem{
 		ID:            strProp(p, "id"),
 		CaseNumber:    strProp(p, "case_number"),
@@ -21,6 +40,7 @@ func proceedingListItemFromProps(p map[string]any) models.ProceedingListItem {
 		Phase:         strProp(p, "phase"),
 		HasConviction: boolProp(p, "has_conviction"),
 		Type:          models.ProceedingType(strProp(p, "type")),
+		Polled:        polled,
 	}
 }
 
@@ -37,7 +57,7 @@ func defendantFromNode(labels []string, props, edgeProps map[string]any) models.
 		Source:            strProp(edgeProps, "source"),
 		Confidence:        float64PtrProp(edgeProps, "confidence"),
 		ConfidenceSignals: strSliceProp(edgeProps, "confidence_signals"),
-		Properties:        edgeProps,
+		Properties:        SanitizeProperties(edgeProps),
 	}
 }
 
@@ -61,20 +81,60 @@ func float64PtrProp(p map[string]any, key string) *float64 {
 	return nil
 }
 
-// QueryProceedings returns a paginated list of LegalProceeding nodes. The SEO
-// sitemap enumerates every case by walking these pages, so the ORDER BY is a
-// fixed, unique-per-node key (case_number is the MERGE key): a non-deterministic
-// order would let rows straddle a page boundary and go permanently unlisted.
-func (db *DB) QueryProceedings(ctx context.Context, page, pageSize int) (*models.ProceedingListResponse, error) {
+// QueryProceedings returns a paginated list of LegalProceeding nodes with support
+// for filters and sorting.
+// Filters:
+//   - court: exact match on court field
+//   - has_conviction: three-state filter (true, false, or absent/null for all)
+//     When true: matches only IS NOT NULL AND = true
+//     When false: matches only IS NOT NULL AND = false (excludes NULL)
+//     When absent: all rows including NULL
+//   - q: folded case-insensitive substring search on case_number or class_name
+//
+// Sorts by case_number (default) or court. case_number order is deterministic for pagination.
+func (db *DB) QueryProceedings(ctx context.Context, court, hasConviction, q, sort string, page, pageSize int) (*models.ProceedingListResponse, error) {
 	page, pageSize, skip := clampPaging(page, pageSize, defaultProceedingPageSize)
 
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
-	countRes, err := session.Run(ctx, `
+	// Build WHERE clause for filters
+	whereClause := "WHERE 1=1"
+	params := map[string]any{
+		"skip":  skip,
+		"limit": pageSize,
+	}
+
+	if court != "" {
+		whereClause += " AND lp.court = $court"
+		params["court"] = court
+	}
+
+	// Three-state conviction filter logic:
+	// - "true": has_conviction = true (polled and convicted)
+	// - "false": has_conviction = false (polled but not convicted)
+	// - absent/other: all rows, including NULL (never polled)
+	if hasConviction == "true" {
+		whereClause += " AND lp.has_conviction = true"
+	} else if hasConviction == "false" {
+		// Explicitly exclude NULL: must be NOT NULL AND false
+		whereClause += " AND lp.has_conviction = false AND lp.has_conviction IS NOT NULL"
+	}
+
+	if q != "" {
+		foldedQuery := foldQuery(q)
+		whereClause += fmt.Sprintf(" AND (%s CONTAINS $q OR %s CONTAINS $q)",
+			foldExpr("lp.case_number"),
+			foldExpr("lp.class_name"))
+		params["q"] = foldedQuery
+	}
+
+	// Count total
+	countRes, err := session.Run(ctx, fmt.Sprintf(`
     MATCH (lp:LegalProceeding)
+    %s
     RETURN count(lp) AS total
-  `, nil)
+  `, whereClause), params)
 	if err != nil {
 		return nil, fmt.Errorf("memgraph: count proceedings: %w", err)
 	}
@@ -88,12 +148,13 @@ func (db *DB) QueryProceedings(ctx context.Context, page, pageSize int) (*models
 		return nil, fmt.Errorf("memgraph: count proceedings rows: %w", err)
 	}
 
-	res, err := session.Run(ctx, `
+	res, err := session.Run(ctx, fmt.Sprintf(`
     MATCH (lp:LegalProceeding)
+    %s
     RETURN lp
-    ORDER BY lp.case_number
+    ORDER BY %s
     SKIP $skip LIMIT $limit
-  `, map[string]any{"skip": skip, "limit": pageSize})
+  `, whereClause, proceedingOrderBy(sort)), params)
 	if err != nil {
 		return nil, fmt.Errorf("memgraph: query proceedings: %w", err)
 	}
