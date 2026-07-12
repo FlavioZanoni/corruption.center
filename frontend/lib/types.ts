@@ -199,3 +199,56 @@ export interface TimelineRange {
   from: number // year
   to: number   // year
 }
+
+// ─── Court proceedings browse (paginated list) ───────────────────────────────
+
+export interface ProceedingListItem {
+  id: string
+  case_number: string
+  court: string
+  status: string
+  phase: string
+  has_conviction: boolean
+  polled: boolean
+  type: string
+}
+
+export interface ProceedingListResponse {
+  items: ProceedingListItem[]
+  page: number
+  page_size: number
+  total: number
+}
+
+// ─── Sanctions browse (paginated list) ───────────────────────────────────────
+
+export interface SanctionListItem {
+  id: string
+  registry: string
+  sanction_type: string
+  organ: string
+  date_start: string
+  date_end: string
+  process_ref: string
+  source_url: string
+  sanctioned_id: string
+  sanctioned_name: string
+  sanctioned_document: string
+  sanctioned_type: string
+}
+
+export interface SanctionListResponse {
+  items: SanctionListItem[]
+  page: number
+  page_size: number
+  total: number
+}
+
+export interface SanctionRegistry {
+  registry: string
+  count: number
+}
+
+export interface SanctionRegistryResponse {
+  registries: SanctionRegistry[]
+}

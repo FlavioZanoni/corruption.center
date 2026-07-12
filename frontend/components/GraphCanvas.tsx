@@ -11,6 +11,7 @@ import { useAppStore } from "@/lib/store";
 import type { LayoutMode } from "@/lib/store";
 import { fetchTimeline } from "@/lib/api/timeline";
 import { NODE_COLORS } from "@/lib/constants";
+import { NODE_TYPE_LABELS } from "@/lib/entity-labels";
 import type {
   GraphNode,
   GraphEdge,
@@ -494,26 +495,68 @@ export function GraphCanvas() {
       .attr("stroke", (d) => d.color)
       .attr("stroke-width", 1.5);
 
-    // Conviction ring. It marks the CASE, and deliberately never a person.
+    // Three conviction states on legal_proceeding nodes, visually distinct.
     //
-    // A case with ten defendants that ends in a conviction says nothing about
-    // which of the ten, and no official source we use publishes the per-defendant
-    // outcome: DataJud gives case-level movements, DJEN gives names with no
-    // outcome at all. "This case ended in a conviction" is true and defensible.
-    // "This person was convicted" would be an accusation we cannot source — so
-    // the ring goes on the proceeding, and the reader draws their own line.
+    // RATIONALE: DataJud (CNJ database) has polled ~6250 of ~6264 cases. The API
+    // returns `polled: true` when checked; `has_conviction` is absent/undefined for
+    // never-polled cases. A reader must never mistake "we have not looked at this
+    // yet" for "we looked and found no conviction" — absent data is not innocence.
+    // This is legally critical: a proceeding marked "checked, no conviction" carries
+    // a defensible conclusion; one marked "not yet checked" is merely provisional.
+    //
+    // Conviction ring marks the CASE, not a person. A case with ten defendants
+    // and one conviction says nothing about which of the ten — no official source
+    // publishes per-defendant outcomes. So the ring goes on the proceeding, and
+    // the reader draws their own line.
     //
     // has_conviction is not latched: an acquittal on appeal clears it (see
     // deriveCaseState), so the ring disappears if the conviction is overturned.
+
+    // EVERY state below is scoped to legal_proceeding. Without that guard the
+    // "never checked" rule — has_conviction is undefined — matches every OTHER node
+    // type too, because a politician, a person, a scandal and a sanction have no
+    // has_conviction property at all. The whole graph would wear the dashed ring
+    // that means "this case has not been verified".
+    const isProceeding = (d: SimNode) => d.type === "legal_proceeding";
+
+    // 1. CONVICTED (red ring) — has_conviction === true
     nodeSel
-      .filter((d) => d.properties?.has_conviction === true)
+      .filter((d) => isProceeding(d) && d.properties?.has_conviction === true)
       .append("circle")
-      .attr("class", "node-conviction")
+      .attr("class", "node-conviction-ring")
       .attr("r", (d) => d.radius + 3.5)
       .attr("fill", "none")
       .attr("stroke", "#cc2222")
       .attr("stroke-width", 2)
       .attr("stroke-opacity", 0.9);
+
+    // 2. CHECKED & NOT CONVICTED (calm solid outline) — has_conviction === false
+    nodeSel
+      .filter((d) => isProceeding(d) && d.properties?.has_conviction === false)
+      .append("circle")
+      .attr("class", "node-conviction-checked")
+      .attr("r", (d) => d.radius + 3.5)
+      .attr("fill", "none")
+      .attr("stroke", "#4a6a7a")
+      .attr("stroke-width", 1.5)
+      .attr("stroke-opacity", 0.6);
+
+    // 3. NEVER CHECKED (dashed faint outline) — has_conviction absent.
+    nodeSel
+      .filter(
+        (d) =>
+          isProceeding(d) &&
+          (d.properties?.has_conviction === undefined ||
+            d.properties?.has_conviction === null),
+      )
+      .append("circle")
+      .attr("class", "node-conviction-unchecked")
+      .attr("r", (d) => d.radius + 3.5)
+      .attr("fill", "none")
+      .attr("stroke", "#5a5a5a")
+      .attr("stroke-width", 1.5)
+      .attr("stroke-dasharray", "3 3")
+      .attr("stroke-opacity", 0.5);
 
     // photo or icon
     nodeSel
@@ -525,6 +568,27 @@ export function GraphCanvas() {
       .attr("height", (d) => (photoUrl(d) ? d.radius * 2 : d.radius * 1.2))
       .attr("clip-path", (d) => `url(#clip-${d.id})`)
       .attr("preserveAspectRatio", "xMidYMid slice");
+
+    // Hover tooltip: label + type + conviction state (for proceedings)
+    nodeSel
+      .append("title")
+      .text((d) => {
+        const typeLabel = NODE_TYPE_LABELS[d.type] ?? d.type;
+        let tooltip = `${d.label}\n${typeLabel}`;
+
+        // For legal proceedings, add conviction state
+        if (d.type === "legal_proceeding") {
+          if (d.properties?.has_conviction === true) {
+            tooltip += "\nCondenado";
+          } else if (d.properties?.has_conviction === false) {
+            tooltip += "\nVerificado (sem condenação)";
+          } else {
+            tooltip += "\nNão verificado";
+          }
+        }
+
+        return tooltip;
+      });
 
     // labels - scandals always visible and slightly larger
     nodeSel

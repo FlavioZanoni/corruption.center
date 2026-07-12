@@ -110,15 +110,25 @@ func (db *DB) QueryProceedings(ctx context.Context, court, hasConviction, q, sor
 		params["court"] = court
 	}
 
-	// Three-state conviction filter logic:
-	// - "true": has_conviction = true (polled and convicted)
-	// - "false": has_conviction = false (polled but not convicted)
-	// - absent/other: all rows, including NULL (never polled)
-	if hasConviction == "true" {
+	// Three-state conviction filter:
+	//   "true"    → a court convicted (13 cases)
+	//   "false"   → DataJud looked and there is no conviction (1 case)
+	//   "unknown" → DataJud has NEVER looked (6,489 cases)
+	//   absent    → all of the above
+	//
+	// "unknown" has to be its own filter value, not the absence of one. Without it
+	// the UI's "Não verificado" option sent no filter at all and returned everything
+	// — convicted cases included — under a heading promising the opposite. Offering
+	// to filter for "we have not checked" and then showing convictions is worse than
+	// not offering the filter.
+	switch hasConviction {
+	case "true":
 		whereClause += " AND lp.has_conviction = true"
-	} else if hasConviction == "false" {
-		// Explicitly exclude NULL: must be NOT NULL AND false
+	case "false":
+		// NULL is not false. A case nobody examined has not been cleared.
 		whereClause += " AND lp.has_conviction = false AND lp.has_conviction IS NOT NULL"
+	case "unknown":
+		whereClause += " AND lp.has_conviction IS NULL"
 	}
 
 	if q != "" {

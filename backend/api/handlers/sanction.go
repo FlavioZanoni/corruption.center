@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"corruption-center/api/services"
@@ -27,7 +28,14 @@ func NewSanctionHandler(service services.GraphService) *SanctionHandler {
 // @Failure      500  {object}  models.ErrorResponse
 // @Router       /sanction/{id} [get]
 func (h *SanctionHandler) GetSanction(c *gin.Context) {
+	// A sanction id carries a colon ("CEAF:379066"), and it is the only id here that
+	// does. Any correct client percent-encodes it, and gin hands the param back still
+	// encoded — so "CEAF%3A379066" was looked up verbatim, matched nothing, and the
+	// endpoint 404'd on a properly-formed URL while working for a hand-typed one.
 	id := c.Param("id")
+	if decoded, err := url.PathUnescape(id); err == nil {
+		id = decoded
+	}
 
 	sanction, err := h.service.GetSanction(c.Request.Context(), id)
 	if err != nil {

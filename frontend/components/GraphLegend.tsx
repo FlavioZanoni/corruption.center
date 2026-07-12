@@ -18,9 +18,13 @@ const LEGEND_ENTRIES = [
   { kind: "node", color: "#c8a96e", label: "Político" },
   { kind: "node", color: "#5b9bd5", label: "Organização" },
   { kind: "node", color: "#d98a4b", label: "Sanção" },
-  // The ring says the CASE ended in a conviction. It never says which defendant
-  // was convicted, because no official source we use publishes that.
+  // Three conviction states on legal_proceeding nodes — legally critical to
+  // distinguish "we checked and found no conviction" from "we haven't checked yet".
+  // The ring marks the CASE, not a person — a case with ten defendants and one
+  // conviction says nothing about which of the ten, so the reader draws their own line.
   { kind: "ring", color: "#cc2222", label: "Processo com condenação" },
+  { kind: "ring", color: "#4a6a7a", label: "Processo verificado (sem condenação)" },
+  { kind: "ring", color: "#5a5a5a", label: "Processo não verificado" },
   // edge types, all of which the graph really contains
   {
     kind: "edge",
@@ -76,7 +80,11 @@ export function GraphLegend() {
                     r="6"
                     fill="none"
                     stroke={e.color}
-                    strokeWidth="1.5"
+                    strokeWidth={e.color === "#5a5a5a" ? "1.5" : "1.5"}
+                    strokeOpacity={
+                      e.color === "#cc2222" ? 0.9 : e.color === "#4a6a7a" ? 0.6 : 0.5
+                    }
+                    strokeDasharray={e.color === "#5a5a5a" ? "3 3" : undefined}
                   />
                 </svg>
               ) : (

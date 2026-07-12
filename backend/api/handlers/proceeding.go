@@ -24,7 +24,7 @@ func NewProceedingHandler(service services.GraphService) *ProceedingHandler {
 // @Param        page      query     int     false  "Page number (1-based, default 1)"
 // @Param        page_size query     int     false  "Items per page (default 24, max 100)"
 // @Param        court     query     string  false  "Filter by court (exact match)"
-// @Param        has_conviction query string false "Filter by conviction status: true (convicted), false (no conviction), or absent (all including never-polled)"
+// @Param        has_conviction query string false "Conviction state: true (a court convicted), false (DataJud looked, no conviction), unknown (DataJud has never looked), or absent (all)"
 // @Param        q         query     string  false  "Search query (case/accent-insensitive substring on case_number or class_name)"
 // @Param        sort      query     string  false  "Sort order: case_number (default) or court"
 // @Success      200  {object}  models.ProceedingListResponse

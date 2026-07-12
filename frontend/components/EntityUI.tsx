@@ -1,5 +1,5 @@
 // Shared server-rendered building blocks for the crawlable entity pages
-// (/politico/[id] and /escandalo/[id]).
+// (/politico/[id], /escandalo/[id], /pessoa/[id], /organizacao/[id], /processo/[id]).
 //
 // Everything here is plain HTML: no hooks, no client bundle, no graph canvas.
 // A crawler with JavaScript disabled must be able to read every fact and every
@@ -33,6 +33,32 @@ export function JsonLd({ data }: { data: Record<string, unknown> }) {
       }}
     />
   )
+}
+
+// ─── Entity routing ───────────────────────────────────────────────────────────
+
+/**
+ * Maps entity type to the appropriate page route.
+ * Returns undefined for entity types that don't have a dedicated page.
+ */
+export function entityHref(type: string, id: string): string | undefined {
+  const encoded = encodeURIComponent(id)
+  switch (type.toLowerCase()) {
+    case "politician":
+      return `/politico/${encoded}`
+    case "person":
+      return `/pessoa/${encoded}`
+    case "organization":
+      return `/organizacao/${encoded}`
+    case "legal_proceeding":
+      return `/processo/${encoded}`
+    case "scandal":
+      return `/escandalo/${encoded}`
+    case "sanction":
+      return `/sancao/${encoded}`
+    default:
+      return undefined
+  }
 }
 
 // ─── Chrome ───────────────────────────────────────────────────────────────────

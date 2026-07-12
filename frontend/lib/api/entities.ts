@@ -83,3 +83,123 @@ export function fetchScandalDetail(id: string): Promise<ScandalDetail | null> {
     `/api/v1/scandal/${encodeURIComponent(id)}`,
   )
 }
+
+// ─── Person ───────────────────────────────────────────────────────────────────
+
+export interface PersonRecord {
+  id: string
+  name: string
+  cpf?: string
+  provenance_source?: string
+  provenance_link?: string
+  provenance_tribunal?: string
+}
+
+export interface PersonDetail {
+  person: PersonRecord
+  connections: GraphResponse
+}
+
+export function fetchPersonDetail(id: string): Promise<PersonDetail | null> {
+  return fetchEntity<PersonDetail>(`/api/v1/person/${encodeURIComponent(id)}`)
+}
+
+// ─── Organization ─────────────────────────────────────────────────────────────
+
+export interface OrganizationRecord {
+  id: string
+  name?: string
+  cnpj?: string
+  razao_social?: string
+  provenance_source?: string
+  provenance_link?: string
+}
+
+export interface OrganizationDetail {
+  organization: OrganizationRecord
+  connections: GraphResponse
+}
+
+export function fetchOrganizationDetail(
+  id: string,
+): Promise<OrganizationDetail | null> {
+  return fetchEntity<OrganizationDetail>(
+    `/api/v1/organization/${encodeURIComponent(id)}`,
+  )
+}
+
+// ─── Legal Proceeding ─────────────────────────────────────────────────────────
+
+export interface DefendantInfo {
+  id: string
+  name: string
+  type: "Politician" | "Person" | "Organization"
+  outcome: string
+  source: string
+  properties?: {
+    outcome?: string
+    outcome_source?: string
+    outcome_evidence_url?: string
+    outcome_recorded_at?: string
+    source?: string
+  }
+}
+
+export interface LegalProceedingRecord {
+  id: string
+  case_number: string
+  court?: string
+  status?: string
+  phase?: string
+  has_conviction: boolean
+  polled: boolean
+  type?: string
+  assuntos?: string[]
+  url?: string
+  scandal?: {
+    id: string
+    name: string
+  } | null
+  defendants: DefendantInfo[]
+}
+
+export function fetchLegalProceedingDetail(
+  id: string,
+): Promise<LegalProceedingRecord | null> {
+  return fetchEntity<LegalProceedingRecord>(
+    `/api/v1/proceeding/${encodeURIComponent(id)}`,
+  )
+}
+
+// ─── Sanction ─────────────────────────────────────────────────────────────────
+// Sanctions are the largest thing in the graph (64,779 nodes) and had no page at
+// all, so selecting one in search navigated nowhere — the click just closed the
+// dropdown.
+
+export interface SanctionRecord {
+  id: string
+  registry: string
+  sanction_type: string
+  organ: string
+  date_start: string | null
+  date_end: string | null
+  process_ref: string
+  source_url: string
+}
+
+export interface SanctionedPartyRecord {
+  id: string
+  name?: string
+  cnpj?: string
+  cpf?: string
+  type: string // "Person" | "Organization" | "Politician"
+}
+
+export interface SanctionDetail {
+  sanction: SanctionRecord
+  parties: SanctionedPartyRecord[]
+}
+
+export function fetchSanctionDetail(id: string): Promise<SanctionDetail | null> {
+  return fetchEntity<SanctionDetail>(`/api/v1/sanction/${encodeURIComponent(id)}`)
+}

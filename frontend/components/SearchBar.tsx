@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Filter, Search, X, Heart } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
@@ -205,6 +206,7 @@ function GitHubIcon({ size = 18 }: { size?: number }) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function SearchBar() {
+  const router = useRouter();
   const toggleFilterPanel = useAppStore((s) => s.toggleFilterPanel);
   const setSelectedNode = useAppStore((s) => s.setSelectedNode);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
@@ -274,16 +276,29 @@ export function SearchBar() {
 
   const handleSelect = useCallback(
     (result: SearchResult) => {
-      setSelectedNode({
-        id: result.id,
-        type: result.type,
-        label: result.label,
-        properties: result.properties,
-      });
-      setInputValue(result.label);
+      // Navigate to the entity page based on the type.
+      // Routes: /politico/{id}, /pessoa/{id}, /organizacao/{id},
+      // /escandalo/{id}, /processo/{id}
+      const routeMap: Record<string, string> = {
+        politician: "/politico",
+        person: "/pessoa",
+        organization: "/organizacao",
+        scandal: "/escandalo",
+        legal_proceeding: "/processo",
+        sanction: "/sancao",
+      };
+
+      const basePath = routeMap[result.type];
+      if (basePath) {
+        router.push(`${basePath}/${result.id}`);
+      }
+
+      // Clear search state
+      setInputValue("");
+      setSearchQuery("");
       setIsDropdownOpen(false);
     },
-    [setSelectedNode],
+    [router, setSearchQuery],
   );
 
   const handleClear = useCallback(() => {
