@@ -32,7 +32,7 @@ func TestImportYear_FiltersTurnAliasesAndActiveFalse(t *testing.T) {
 		"2022;1;VEREADOR;999;99999999999;ELEITO;RJ;DEF;IGNORA;IGNORA;#NE",
 	}, "\r\n") + "\r\n"
 
-	result, err := ImportYear(strings.NewReader(consulta))
+	result, err := ImportYear(strings.NewReader(consulta), "")
 	if err != nil {
 		t.Fatalf("ImportYear returned error: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestImportYear_SameSQInDifferentStatesAreDifferentPeople(t *testing.T) {
 		"2006;1;DEPUTADO FEDERAL;10204;22222222222;MÉDIA;AL;P2;GIVALDO CARIMBAO;CARIMBAO;#NE",
 	}, "\r\n") + "\r\n"
 
-	result, err := ImportYear(latin1(t, consulta))
+	result, err := ImportYear(latin1(t, consulta), "")
 	if err != nil {
 		t.Fatalf("ImportYear returned error: %v", err)
 	}
@@ -167,11 +167,54 @@ func TestImportYear_AcceptsLegacyElectedLabels(t *testing.T) {
 		"2006;1;DEPUTADO FEDERAL;2;44444444444;SUPLENTE;SP;P1;NOT ELECTED;Y;#NE",
 	}, "\r\n") + "\r\n"
 
-	result, err := ImportYear(latin1(t, consulta))
+	result, err := ImportYear(latin1(t, consulta), "")
 	if err != nil {
 		t.Fatalf("ImportYear returned error: %v", err)
 	}
 	if len(result.Records) != 1 || result.Records[0].CPF != "33333333333" {
 		t.Fatalf("expected the MÉDIA winner only, got %+v", result.Records)
+	}
+}
+
+// The photo URL keys on the candidate's own SQ and UF, not on the file's. Getting
+// the pairing wrong is invisible: TSE answers 200 with a placeholder rather than
+// 404, so the base would fill up with grey silhouettes and look merely photo-less.
+func TestImportYear_BuildsPhotoURLFromCandidateSQAndUF(t *testing.T) {
+	consulta := strings.Join([]string{
+		"ANO_ELEICAO;NR_TURNO;DS_CARGO;SQ_CANDIDATO;NR_CPF_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO",
+		"2022;1;PRESIDENTE;280001607829;12345678900;ELEITO;BR;PT;LUIZ INACIO LULA DA SILVA;LULA;#NULO#",
+	}, "\r\n") + "\r\n"
+
+	result, err := ImportYear(latin1(t, consulta), "2040602022")
+	if err != nil {
+		t.Fatalf("ImportYear: %v", err)
+	}
+	if len(result.Records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(result.Records))
+	}
+	got := result.Records[0].PhotoURL
+	want := "https://divulgacandcontas.tse.jus.br/divulga/rest/arquivo/img/2040602022/280001607829/BR"
+	if got != want {
+		t.Fatalf("PhotoURL = %q, want %q", got, want)
+	}
+}
+
+// Without an election id (2002 and earlier) the year still imports; it just has
+// no photos. It must not emit a half-built URL.
+func TestImportYear_NoElectionIDMeansNoPhoto(t *testing.T) {
+	consulta := strings.Join([]string{
+		"ANO_ELEICAO;NR_TURNO;DS_CARGO;SQ_CANDIDATO;NR_CPF_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO",
+		"2002;1;PRESIDENTE;9574;12345678900;ELEITO;BR;PT;LUIZ INACIO LULA DA SILVA;LULA;#NULO#",
+	}, "\r\n") + "\r\n"
+
+	result, err := ImportYear(latin1(t, consulta), "")
+	if err != nil {
+		t.Fatalf("ImportYear: %v", err)
+	}
+	if len(result.Records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(result.Records))
+	}
+	if got := result.Records[0].PhotoURL; got != "" {
+		t.Fatalf("expected no photo URL without an election id, got %q", got)
 	}
 }

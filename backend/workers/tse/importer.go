@@ -80,7 +80,10 @@ type PoliticianRecord struct {
 	TSEProfileURLs []string
 	ElectionYear   int
 	CandidateSQ    string
-	Active         bool
+	// PhotoURL hotlinks the candidate photo on divulgacandcontas. Empty when TSE
+	// has no election for the year (2002 and earlier).
+	PhotoURL string
+	Active   bool
 }
 
 type winnerRow struct {
@@ -110,6 +113,10 @@ func candidateKey(uf, sq string) string {
 type ImportOptions struct {
 	MinDiskBytes uint64
 	MinMemBytes  uint64
+	// ElectionID is TSE's internal id for this year's election, used to build
+	// photo hotlinks. Resolve it with ResolveElectionID; leaving it empty simply
+	// imports the year without photos.
+	ElectionID string
 }
 
 // ImportYear reads a single consulta_cand CSV and returns the elected officials
@@ -122,13 +129,15 @@ type ImportOptions struct {
 // does not use, and they cost 552MB zipped per year (multiple GB unzipped)
 // against 4MB for consulta_cand. Dropping them removed the disk pressure that
 // made the 2022 import fail outright.
-func ImportYear(consultaCSV io.Reader) (*ImportResult, error) {
+// electionID is TSE's internal id for the year's election and is only used to
+// build photo URLs; pass "" to import without photos.
+func ImportYear(consultaCSV io.Reader, electionID string) (*ImportResult, error) {
 	winners, stats, err := readWinnersFromReader(consultaCSV)
 	if err != nil {
 		return nil, err
 	}
 	stats.WinningCandidates = len(winners)
-	return buildResult(winners, stats), nil
+	return buildResult(winners, stats, electionID), nil
 }
 
 func ImportYearFromZipFiles(year int, consultaZipPath, workDir string, opts ImportOptions) (*ImportResult, error) {
@@ -184,10 +193,10 @@ func ImportYearFromZipFiles(year int, consultaZipPath, workDir string, opts Impo
 	}
 
 	stats.WinningCandidates = len(winners)
-	return buildResult(winners, stats), nil
+	return buildResult(winners, stats, opts.ElectionID), nil
 }
 
-func buildResult(winners map[string]winnerRow, stats ImportStats) *ImportResult {
+func buildResult(winners map[string]winnerRow, stats ImportStats, electionID string) *ImportResult {
 	result := &ImportResult{Stats: stats}
 	result.Records = make([]PoliticianRecord, 0, len(winners))
 	for _, winner := range winners {
@@ -206,6 +215,7 @@ func buildResult(winners map[string]winnerRow, stats ImportStats) *ImportResult 
 			TSEProfileURLs: []string{buildProfileURL(winner.ElectionYear, sq)},
 			ElectionYear:   year,
 			CandidateSQ:    sq,
+			PhotoURL:       buildPhotoURL(electionID, sq, winner.UF),
 			Active:         false,
 		}
 		addAlias(&record.NameAliases, winner.UrnaName, winner.Name)

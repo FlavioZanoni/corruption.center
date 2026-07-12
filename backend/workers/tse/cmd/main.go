@@ -145,6 +145,15 @@ func main() {
 			}
 		}
 
+		// Photos hang off TSE's internal election id, which only they know. Failing
+		// to resolve it costs the year its photos, not the year: import anyway.
+		electionID, err := tse.ResolveElectionID(context.Background(), nil, y)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[tse] year=%d could not resolve election id, importing without photos: %v\n", y, err)
+		} else if electionID == "" {
+			fmt.Fprintf(os.Stderr, "[tse] year=%d has no divulgacandcontas election; no photos available\n", y)
+		}
+
 		result, err := tse.ImportYearFromZipFiles(
 			y,
 			cPath,
@@ -152,6 +161,7 @@ func main() {
 			tse.ImportOptions{
 				MinDiskBytes: *minDiskMB * 1024 * 1024,
 				MinMemBytes:  *minMemMB * 1024 * 1024,
+				ElectionID:   electionID,
 			},
 		)
 		if err != nil {

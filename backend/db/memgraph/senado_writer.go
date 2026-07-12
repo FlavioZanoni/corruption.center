@@ -27,7 +27,10 @@ WHERE p.state = row.state
 SET
   p.party_current = row.party_current,
   p.role_current = row.role_current,
-  p.photo_url = row.photo_url,
+  // An empty photo from Senado means "not published", not "delete the one we
+  // have". Assigning it blindly would wipe the TSE candidate photo on every sync.
+  p.photo_url = CASE WHEN row.photo_url <> '' THEN row.photo_url ELSE p.photo_url END,
+  p.photo_source = CASE WHEN row.photo_url <> '' THEN 'senado' ELSE p.photo_source END,
   p.active = true,
   p.senado_id = row.senado_id
 RETURN count(p) AS touched

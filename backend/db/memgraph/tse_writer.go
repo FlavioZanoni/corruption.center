@@ -39,6 +39,20 @@ SET p.name_aliases = reduce(acc = current_aliases, x IN row.name_aliases |
 SET p.tse_profile_urls = reduce(acc = current_urls, x IN row.tse_profile_urls |
   CASE WHEN x IN acc THEN acc ELSE acc + x END
 )
+WITH p, row,
+  // Take the TSE photo when there is none yet, or when it would replace an older
+  // TSE photo with a newer one (a 2022 likeness beats a 2006 one, and the older
+  // election is likelier to have no photo on file at all). A portrait from any
+  // other source (camara, senado, Wikimedia) is left alone: those are current and
+  // better, and imports run in no guaranteed order relative to those syncers.
+  (row.photo_url <> '' AND (
+     p.photo_url IS NULL OR p.photo_url = ''
+     OR (p.photo_source = row.photo_source AND row.photo_year > COALESCE(p.photo_year, 0))
+  )) AS take_photo
+SET p.photo_url = CASE WHEN take_photo THEN row.photo_url ELSE p.photo_url END,
+    p.photo_source = CASE WHEN take_photo THEN row.photo_source ELSE p.photo_source END,
+    p.photo_attribution = CASE WHEN take_photo THEN row.photo_attribution ELSE p.photo_attribution END,
+    p.photo_year = CASE WHEN take_photo THEN row.photo_year ELSE p.photo_year END
 RETURN count(p) AS touched
 `
 
@@ -58,6 +72,11 @@ RETURN count(p) AS touched
 				"state":            r.State,
 				"name_aliases":     r.NameAliases,
 				"tse_profile_urls": r.TSEProfileURLs,
+
+				"photo_url":         r.PhotoURL,
+				"photo_source":      tse.PhotoSource,
+				"photo_attribution": tse.PhotoAttribution,
+				"photo_year":        r.ElectionYear,
 			})
 		}
 

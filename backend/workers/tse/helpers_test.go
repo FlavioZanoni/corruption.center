@@ -132,14 +132,14 @@ func TestNewCSVReaderLatin1_DecodesLatin1(t *testing.T) {
 func TestImportYear_MissingHeaderErrors(t *testing.T) {
 	// consulta_cand CSV missing DS_CARGO.
 	consulta := "ANO_ELEICAO;NR_TURNO;SQ_CANDIDATO;NR_CPF_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO\r\n"
-	if _, err := ImportYear(strings.NewReader(consulta)); err == nil {
+	if _, err := ImportYear(strings.NewReader(consulta), ""); err == nil {
 		t.Fatalf("expected missing DS_CARGO header error")
 	}
 }
 
 func TestImportYear_MissingCPFHeaderErrors(t *testing.T) {
 	consulta := "ANO_ELEICAO;NR_TURNO;DS_CARGO;SQ_CANDIDATO;DS_SIT_TOT_TURNO;SG_UF;SG_PARTIDO;NM_CANDIDATO;NM_URNA_CANDIDATO;NM_SOCIAL_CANDIDATO\r\n"
-	if _, err := ImportYear(strings.NewReader(consulta)); err == nil {
+	if _, err := ImportYear(strings.NewReader(consulta), ""); err == nil {
 		t.Fatalf("expected missing NR_CPF_CANDIDATO header error")
 	}
 }
@@ -154,7 +154,7 @@ func TestImportYear_StatsSkipCountersAndNullCPF(t *testing.T) {
 		"2022;;PRESIDENTE;5;55555555555;ELEITO;RJ;DEF;Z;Z;#NE",            // invalid turn -> skipped invalid
 	}, "\r\n") + "\r\n"
 
-	result, err := ImportYear(strings.NewReader(consulta))
+	result, err := ImportYear(strings.NewReader(consulta), "")
 	if err != nil {
 		t.Fatalf("ImportYear error: %v", err)
 	}

@@ -30,7 +30,10 @@ SET
   p.name = row.name,
   p.party_current = row.party_current,
   p.role_current = row.role_current,
-  p.photo_url = row.photo_url,
+  // An empty photo from Camara means "not published", not "delete the one we
+  // have". Assigning it blindly would wipe the TSE candidate photo on every sync.
+  p.photo_url = CASE WHEN row.photo_url <> '' THEN row.photo_url ELSE p.photo_url END,
+  p.photo_source = CASE WHEN row.photo_url <> '' THEN 'camara' ELSE p.photo_source END,
   p.state = row.state,
   p.active = true,
   p.camara_id = row.camara_id
