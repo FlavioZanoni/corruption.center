@@ -5,12 +5,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func newTestCGUClient(baseURL string) *cguClient {
 	c := newCGUClient(baseURL, "test-key")
 	c.minInterval = 0 // no pacing sleeps in tests
-	c.maxRetries = 0   // do not exercise the backoff-sleep retry loop
+	c.maxRetries = 0  // do not exercise the backoff-sleep retry loop
 	return c
 }
 
@@ -88,4 +89,108 @@ func TestCGUThrottle_NoIntervalReturns(t *testing.T) {
 	c := newTestCGUClient("http://example.com")
 	// minInterval 0 → returns immediately, no sleep.
 	c.throttle(context.Background())
+}
+
+// A page that keeps failing must not take down the whole run. CGU is four
+// registries plus the keyless TCU lists, and a run that dies on ceis page 15
+// discards cnep, ceaf and the leniency agreements, which never even started.
+// The registry stops, keeps what it ingested, and the caller moves on.
+func TestRunCGURegistry_PageFailureStopsRegistryNotRun(t *testing.T) {
+	// Wind the retry pacing down: this test exercises the give-up path, and the
+	// production backoff would make it sit for a minute.
+	defer withFastRetries(t)()
+
+	pagesServed := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pagesServed++
+		if r.URL.Query().Get("pagina") == "1" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"id":1,"pessoa":{"cnpjFormatado":"11.222.333/0001-81","nome":"EMPRESA X"},"dataInicioSancao":"01/01/2020"}]`))
+			return
+		}
+		// Every later page is a hard, unrecoverable failure.
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	w := &Worker{opts: Options{
+		APIKey:     "k",
+		CGUBaseURL: server.URL,
+		DryRun:     true, // no graph writes; we only care about control flow
+	}}
+	stats := &Stats{PerRegistry: map[string]int{}}
+
+	if err := w.runCGURegistry(context.Background(), "ceis", stats); err != nil {
+		t.Fatalf("a failing page must not abort the run, got error: %v", err)
+	}
+	if len(stats.FailedRegistries) != 1 {
+		t.Fatalf("expected the aborted registry to be reported, got %v", stats.FailedRegistries)
+	}
+	if stats.RecordsProcessed != 1 {
+		t.Fatalf("expected page 1's record to be kept, got %d", stats.RecordsProcessed)
+	}
+	if pagesServed < 2 {
+		t.Fatalf("expected page 2 to have been attempted, served %d", pagesServed)
+	}
+}
+
+// withFastRetries shrinks the retry pacing for the duration of a test.
+func withFastRetries(t *testing.T) func() {
+	t.Helper()
+	interval, retries, timeout := cguMinInterval, cguMaxRetries, cguHTTPTimeout
+	cguMinInterval, cguMaxRetries, cguHTTPTimeout = 0, 1, 2*time.Second
+	return func() { cguMinInterval, cguMaxRetries, cguHTTPTimeout = interval, retries, timeout }
+}
+
+// CGU answers a valid request with 400 {"Erro na API":"Erro ao executar a consulta"}
+// when its own backend query fails. That is their fault, not ours, and the same
+// page succeeds moments later: retry it instead of abandoning the registry.
+func TestCGUGetPage_RetriesTransient400(t *testing.T) {
+	defer withFastRetries(t)()
+
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"Erro na API":"Erro ao executar a consulta"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":1}]`))
+	}))
+	defer server.Close()
+
+	c := newCGUClient(server.URL, "k")
+	body, err := c.getPage(context.Background(), "ceis", 87)
+	if err != nil {
+		t.Fatalf("expected the transient 400 to be retried, got: %v", err)
+	}
+	if string(body) != `[{"id":1}]` {
+		t.Fatalf("unexpected body: %s", body)
+	}
+	if attempts != 2 {
+		t.Fatalf("expected exactly one retry, got %d attempts", attempts)
+	}
+}
+
+// A genuine client error (a real 400, a 404) must still fail fast.
+func TestCGUGetPage_RealClientErrorDoesNotRetry(t *testing.T) {
+	defer withFastRetries(t)()
+
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"Erro na API":"Parametro invalido"}`))
+	}))
+	defer server.Close()
+
+	c := newCGUClient(server.URL, "k")
+	if _, err := c.getPage(context.Background(), "ceis", 1); err == nil {
+		t.Fatal("expected a real 400 to fail")
+	}
+	if attempts != 1 {
+		t.Fatalf("a real client error must not be retried, got %d attempts", attempts)
+	}
 }

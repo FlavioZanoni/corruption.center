@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,11 +13,18 @@ import (
 	"time"
 )
 
-const (
-	defaultCGUBaseURL = "https://api.portaldatransparencia.gov.br/api-de-dados"
+const defaultCGUBaseURL = "https://api.portaldatransparencia.gov.br/api-de-dados"
+
+// Retry/pacing knobs. Vars rather than consts so tests can wind them down: with
+// the production values, exercising the give-up path costs a full minute of real
+// backoff sleeps.
+var (
 	// Daytime cap is 90 req/min; keep a small margin. Interval ~0.7s/req.
 	cguMinInterval = 700 * time.Millisecond
 	cguMaxRetries  = 5
+	// CGU pages can stall well past 45s under load, which exhausted the retries
+	// and killed a whole run on one slow page.
+	cguHTTPTimeout = 2 * time.Minute
 )
 
 // cguClient talks to the Portal da Transparência "API de Dados". The chave-api-
@@ -38,7 +46,7 @@ func newCGUClient(baseURL, apiKey string) *cguClient {
 	return &cguClient{
 		baseURL:     strings.TrimRight(base, "/"),
 		apiKey:      strings.TrimSpace(apiKey),
-		http:        &http.Client{Timeout: 45 * time.Second},
+		http:        &http.Client{Timeout: cguHTTPTimeout},
 		minInterval: cguMinInterval,
 		maxRetries:  cguMaxRetries,
 	}
@@ -101,7 +109,7 @@ func (c *cguClient) getPage(ctx context.Context, path string, page int) ([]byte,
 				return nil, fmt.Errorf("cgu: read body %s p%d: %w", path, page, readErr)
 			}
 			return body, nil
-		case res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500:
+		case res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500 || isCGUTransient400(res.StatusCode, body):
 			lastErr = fmt.Errorf("cgu: %s p%d status=%d body=%s", path, page, res.StatusCode, truncate(body, 200))
 			if !sleepBackoff(ctx, &backoff) {
 				return nil, lastErr
@@ -162,13 +170,34 @@ func (w *Worker) runCGURegistry(ctx context.Context, group string, stats *Stats)
 	client := newCGUClient(w.opts.CGUBaseURL, w.opts.APIKey)
 	page := 1
 	seen := 0
+
+	// saveState records how far this registry got. It runs after every page, not
+	// only on a clean finish: a run that dies mid-registry must not throw away the
+	// cursor for the pages it did ingest.
+	saveState := func() error {
+		if w.opts.DryRun || w.pg == nil {
+			return nil
+		}
+		return w.pg.UpsertSanctionImportState(ctx, registry, page-1, seen, time.Now().UTC())
+	}
+
 	for {
 		if w.opts.MaxPages > 0 && page > w.opts.MaxPages {
 			break
 		}
 		body, err := client.getPage(ctx, path, page)
 		if err != nil {
-			return err
+			// The API gave up on this page after every retry. Abandoning the run
+			// here would also discard the registries that have not started yet
+			// (CGU is 4 registries plus the keyless TCU lists), so stop THIS
+			// registry, keep what it already ingested, and let the caller move on.
+			if ctx.Err() != nil {
+				return err
+			}
+			slog.Warn("sanctions: registry aborted early; continuing with the next one",
+				"registry", registry, "page", page, "records_ingested", seen, "err", err)
+			stats.FailedRegistries = append(stats.FailedRegistries, fmt.Sprintf("%s@p%d", group, page))
+			return saveState()
 		}
 		records, err := mapCGUPage(registry, body)
 		if err != nil {
@@ -184,14 +213,12 @@ func (w *Worker) runCGURegistry(ctx context.Context, group string, stats *Stats)
 			seen++
 		}
 		page++
-	}
-
-	if !w.opts.DryRun && w.pg != nil {
-		if err := w.pg.UpsertSanctionImportState(ctx, registry, page-1, seen, time.Now().UTC()); err != nil {
+		if err := saveState(); err != nil {
 			return err
 		}
 	}
-	return nil
+
+	return saveState()
 }
 
 // mapCGUPage decodes a raw JSON array for a registry and maps it to normalized
@@ -474,4 +501,22 @@ func normalizeDate(s string) string {
 		}
 	}
 	return ""
+}
+
+// isCGUTransient400 reports whether a 400 is really a server-side failure that
+// CGU mislabels as a client error.
+//
+// The API answers a perfectly valid page request with
+//
+//	400 {"Erro na API":"Erro ao executar a consulta"}
+//
+// when its backend query fails under load. Treating it as a client error meant
+// giving up on the page: the CEIS import stopped at page 87 and silently lost
+// every sanction beyond it, though that same page returned 200 on the next try.
+// The request is unchanged between attempts, so a 400 here can only be theirs.
+func isCGUTransient400(status int, body []byte) bool {
+	if status != http.StatusBadRequest {
+		return false
+	}
+	return strings.Contains(string(body), "Erro ao executar a consulta")
 }

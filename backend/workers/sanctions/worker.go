@@ -80,8 +80,12 @@ type Stats struct {
 	SkippedDuplicateReview int `json:"skipped_duplicate_review"`
 	// SkippedRegistries lists CGU registries skipped this run because no
 	// TRANSPARENCIA_API_KEY was set (TCU still runs, being keyless).
-	SkippedRegistries []string       `json:"skipped_registries,omitempty"`
-	PerRegistry       map[string]int `json:"per_registry"`
+	SkippedRegistries []string `json:"skipped_registries,omitempty"`
+	// FailedRegistries lists registries that stopped early because the API kept
+	// failing on a page ("ceis@p15"). What they ingested before that is kept; the
+	// rest of the run continues. Re-run to pick up the remainder.
+	FailedRegistries []string       `json:"failed_registries,omitempty"`
+	PerRegistry      map[string]int `json:"per_registry"`
 }
 
 // sanctionsStore is the subset of *psql.DB the worker consults. Declared as an
