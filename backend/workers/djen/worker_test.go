@@ -303,3 +303,50 @@ func TestSnippetStripsTagsAndTruncates(t *testing.T) {
 		t.Fatalf("expected truncation to 5 runes, got %d", len([]rune(long)))
 	}
 }
+
+// DJEN substring-matches nomeParte, so a search for a politician answers with the
+// cases of everyone whose name merely contains it. These are the real names that
+// a "SERGIO CABRAL" search pulled into the database before this guard existed.
+func TestGroupNamesParty_RejectsSubstringStrangers(t *testing.T) {
+	strangers := []string{
+		"ALEXANDRE SERGIO CABRAL DE BRITO",
+		"EDUARDO SERGIO CABRAL DE LIMA",
+		"PAULO SERGIO CABRAL DUARTE",
+		"SERGIO CABRAL DA SILVA",
+		"JULIANA CABRAL DE LIMA OLIVEIRA",
+	}
+	for _, s := range strangers {
+		group := []Item{{Destinatarios: []Destinatario{{Nome: s, Polo: "P"}}}}
+		if groupNamesParty(group, "SERGIO CABRAL") {
+			t.Errorf("%q is not SERGIO CABRAL; registering their case tracks a stranger", s)
+		}
+	}
+
+	// The politician himself must still match, accents and co-party marker included.
+	for _, real := range []string{"SERGIO CABRAL", "sergio cabral", "SÉRGIO CABRAL E OUTROS (3)"} {
+		group := []Item{{Destinatarios: []Destinatario{{Nome: real, Polo: "P"}}}}
+		if !groupNamesParty(group, "SERGIO CABRAL") {
+			t.Errorf("%q is SERGIO CABRAL and must match", real)
+		}
+	}
+}
+
+// Name mode searches legal names only. Aliases are ballot nicknames; courts write
+// legal names, so an alias search returns substring noise and nothing else.
+func TestSearchNamesFor_SearchesLegalNameOnlyNotAliases(t *testing.T) {
+	pol := memgraph.PoliticianNames{
+		ID:      "pol_1",
+		Name:    "LUIZ INACIO LULA DA SILVA",
+		Aliases: []string{"LULA", "LULA DA SILVA"},
+	}
+	got := searchNamesFor(pol)
+	if len(got) != 1 || got[0] != "LUIZ INACIO LULA DA SILVA" {
+		t.Fatalf("searchNamesFor = %v, want only the legal name", got)
+	}
+
+	// The aliases stay in the matching index — recognising a nickname a court did
+	// print is free; only searching for one is not.
+	if id, ok := matchPolitician("LULA", buildPoliticianIndex([]memgraph.PoliticianNames{pol})); !ok || id != "pol_1" {
+		t.Fatal("aliases must remain matchable in the politician index")
+	}
+}

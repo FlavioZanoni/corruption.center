@@ -74,6 +74,10 @@ type RunStats struct {
 	SkippedTracked       int `json:"skipped_already_tracked"`
 	SkippedExisting      int `json:"skipped_already_reviewed"`
 	SkippedClass         int `json:"skipped_class_filter"`
+	// SkippedNotAParty counts cases DJEN returned for a name search where the name
+	// is not actually a party — DJEN substring-matches, so "SERGIO CABRAL" pulls in
+	// every ALEXANDRE SERGIO CABRAL DE BRITO. Expect this to be most of the results.
+	SkippedNotAParty int `json:"skipped_name_not_a_party"`
 	// SkippedTombstoned counts parties whose name was LGPD-purged: the Person or
 	// Organization node is NOT re-created (resurrection guard, migration 008).
 	SkippedTombstoned int `json:"skipped_tombstoned"`
@@ -85,6 +89,10 @@ type RunStats struct {
 	// FetchErrors counts DJEN lookups abandoned after the client exhausted its
 	// retries. DJEN returns sporadic 500s, and a run scans hundreds of names; one bad lookup skips its item instead of discarding the whole run.
 	FetchErrors int `json:"fetch_errors"`
+	// SkippedRecords counts individual communications DJEN would not serve at any
+	// page size. They are a real hole in the run's data, so it reports them rather
+	// than quietly returning the rest as if it were everything.
+	SkippedRecords int64 `json:"skipped_unservable_records"`
 }
 
 func NewWorker(pg *psql.DB, mg *memgraph.DB, opts Options) *Worker {
@@ -120,6 +128,11 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 		if err := w.runRematchMode(ctx, opts, index, stats); err != nil {
 			return nil, err
 		}
+	}
+	stats.SkippedRecords = w.client.SkippedRecords()
+	if stats.SkippedRecords > 0 {
+		w.log.Warn("djen: records DJEN would not serve at any page size; they are missing from this run",
+			"count", stats.SkippedRecords)
 	}
 	return stats, nil
 }
@@ -373,7 +386,7 @@ func (w *Worker) runNameMode(ctx context.Context, opts Options, pols []memgraph.
 
 	for _, pol := range pols {
 		stats.PoliticiansScanned++
-		for _, name := range namesFor(pol) {
+		for _, name := range searchNamesFor(pol) {
 			stats.NamesSearched++
 			items, err := w.client.SearchByPartyName(ctx, name, cap)
 			if err != nil {
@@ -386,6 +399,14 @@ func (w *Worker) runNameMode(ctx context.Context, opts Options, pols []memgraph.
 			}
 
 			for caseNumber, group := range groupByProcesso(items) {
+				// DJEN answers nomeParte as a SUBSTRING match, so most of what comes
+				// back is not the politician at all. Verify before doing anything
+				// with the case.
+				if !groupNamesParty(group, name) {
+					stats.SkippedNotAParty++
+					continue
+				}
+
 				// watcher_tracking.case_number and candidate payloads may be stored
 				// in formatted CNJ form; both the dedup queries and this param are
 				// normalized to digits-only so the comparison actually matches.
@@ -457,6 +478,47 @@ func (w *Worker) registerDiscoveredCase(ctx context.Context, caseNumber string, 
 		return false, err
 	}
 	return true, nil
+}
+
+// groupNamesParty reports whether the name we searched for is actually one of the
+// case's parties.
+//
+// DJEN matches nomeParte as a SUBSTRING, which is not documented and does not
+// look like a search until you read the results. A search for "SERGIO CABRAL"
+// answers with the cases of ALEXANDRE SERGIO CABRAL DE BRITO, EDUARDO SERGIO
+// CABRAL DE LIMA, PAULO SERGIO CABRAL DUARTE — strangers who merely contain the
+// string. Name mode registers whatever it is handed, so without this check it
+// tracks a private citizen's criminal case in a corruption database on the
+// strength of a shared surname. The name must equal a party, not be inside one.
+func groupNamesParty(group []Item, name string) bool {
+	want := normalizeName(name)
+	if want == "" {
+		return false
+	}
+	for _, it := range group {
+		for _, d := range it.Destinatarios {
+			if normalizeName(stripEOutros(d.Nome)) == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// searchNamesFor is the set of names name mode actually queries DJEN for: the
+// legal name, never the aliases.
+//
+// Aliases are ballot nicknames — LULA, DENTINHO, TIRIRICA — and courts write
+// legal names, so searching one returns only substring noise: "LULA" answers with
+// 6,902 communications belonging to people surnamed Lula, "DENTINHO" with a truck
+// dealership. They still belong in the politician index (see buildPoliticianIndex),
+// where recognising a nickname a court did happen to print costs nothing. They are
+// just not worth a query each — and querying them is what surfaced the strangers.
+func searchNamesFor(pol memgraph.PoliticianNames) []string {
+	if n := strings.TrimSpace(pol.Name); n != "" {
+		return []string{n}
+	}
+	return nil
 }
 
 func namesFor(pol memgraph.PoliticianNames) []string {
