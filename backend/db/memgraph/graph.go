@@ -88,12 +88,31 @@ func (db *DB) QueryTimeline(ctx context.Context, from time.Time, to time.Time) (
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
+	// The timeline feeds the graph canvas, which builds its whole adjacency map
+	// from this one response: it draws scandals by default and reveals a node's
+	// neighbours on click. So it has to return the edges, not just the scandals.
+	//
+	// It used to ask only for (:Politician)-[:INVOLVED_IN]->(:Scandal). Nothing
+	// writes that edge except a human in the backoffice; the workers connect people
+	// to scandals through the cases instead, via
+	//
+	//   (s:Scandal)<-[:INVESTIGATES]-(:LegalProceeding)<-[:DEFENDANT_IN]-(person)
+	//
+	// so the canvas received scandals with no edges at all and clicking one
+	// revealed nothing, while the detail panel (which queries the scandal directly
+	// and does walk the cases) happily listed the connections it could not draw.
 	result, err := session.Run(ctx, `
     MATCH (s:Scandal)
     WHERE s.date_start <= $to AND (s.date_end IS NULL OR s.date_end >= $from)
     OPTIONAL MATCH (p:Politician)-[r:INVOLVED_IN]->(s)
     WHERE r.date_from <= $to AND (r.date_to IS NULL OR r.date_to >= $from)
-    RETURN s, p, r
+    OPTIONAL MATCH (person:Person)-[pr:INVOLVED_IN]->(s)
+    OPTIONAL MATCH (o:Organization)-[ri:IMPLICATED_IN]->(s)
+    OPTIONAL MATCH (lp:LegalProceeding)-[inv:INVESTIGATES]->(s)
+    OPTIONAL MATCH (p2:Politician)-[d1:DEFENDANT_IN]->(lp)
+    OPTIONAL MATCH (person2:Person)-[d2:DEFENDANT_IN]->(lp)
+    OPTIONAL MATCH (o2:Organization)-[d3:DEFENDANT_IN]->(lp)
+    RETURN s, p, r, person, pr, o, ri, lp, inv, p2, d1, person2, d2, o2, d3
   `, map[string]any{
 		"from": from.Format("2006-01-02"),
 		"to":   to.Format("2006-01-02"),

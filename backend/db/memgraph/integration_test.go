@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
 	"corruption-center/workers/tse"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -217,4 +218,72 @@ func containsAll(hay []string, needles []string) bool {
 		}
 	}
 	return true
+}
+
+// The graph canvas builds its entire adjacency map from the timeline response: it
+// draws scandals by default and reveals a node's neighbours when one is clicked.
+// So the timeline must return the edges, not only the scandals.
+//
+// It used to match only (:Politician)-[:INVOLVED_IN]->(:Scandal), an edge no
+// worker writes. The canvas got scandals with no edges and clicking one revealed
+// nothing, while the detail panel queried the scandal directly, walked the cases,
+// and listed the very connections the canvas could not draw.
+func TestQueryTimeline_ReturnsScandalEdgesThroughCases(t *testing.T) {
+	ctx := context.Background()
+
+	container, uri := startMemgraphContainer(t, ctx)
+	defer func() { _ = container.Terminate(context.Background()) }()
+
+	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	driver, err := neo4j.NewDriverWithContext(uri, neo4j.BasicAuth("", "", ""))
+	if err != nil {
+		t.Fatalf("new memgraph driver: %v", err)
+	}
+	db := &DB{driver: driver, log: log}
+	defer db.Close(ctx)
+
+	// A scandal connected to a person the way the workers actually connect them:
+	// through the case, never with a direct INVOLVED_IN edge.
+	session := driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	if _, err := session.Run(ctx, `
+CREATE (s:Scandal {id: 'lava-jato', name: 'Operacao Lava Jato',
+                   date_start: '2014-03-17', date_end: '2021-02-03'})
+CREATE (lp:LegalProceeding {id: 'lp1', case_number: '50833760520144047000'})
+CREATE (p:Person {id: 'person1', name: 'FULANO DE TAL'})
+CREATE (lp)-[:INVESTIGATES]->(s)
+CREATE (p)-[:DEFENDANT_IN]->(lp)
+`, nil); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	session.Close(ctx)
+
+	from, _ := time.Parse("2006-01-02", "2000-01-01")
+	to, _ := time.Parse("2006-01-02", "2025-12-31")
+	got, err := db.QueryTimeline(ctx, from, to)
+	if err != nil {
+		t.Fatalf("QueryTimeline: %v", err)
+	}
+
+	if len(got.Edges) == 0 {
+		t.Fatalf("timeline returned %d nodes but no edges: the canvas cannot expand a scandal it has no adjacency for", len(got.Nodes))
+	}
+
+	types := map[string]int{}
+	for _, e := range got.Edges {
+		types[string(e.Type)]++
+	}
+	if types["INVESTIGATES"] != 1 {
+		t.Errorf("expected the scandal's case edge, got edges %v", types)
+	}
+	if types["DEFENDANT_IN"] != 1 {
+		t.Errorf("expected the case's defendant edge, got edges %v", types)
+	}
+
+	kinds := map[string]int{}
+	for _, n := range got.Nodes {
+		kinds[string(n.Type)]++
+	}
+	if kinds["scandal"] != 1 || kinds["legal_proceeding"] != 1 || kinds["person"] != 1 {
+		t.Errorf("expected scandal + case + person, got nodes %v", kinds)
+	}
 }
