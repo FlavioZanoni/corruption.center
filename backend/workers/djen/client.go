@@ -22,10 +22,19 @@ const (
 	// is nowhere in their docs. We asked for 100 and got a 500 on every single
 	// lookup: a full run made 47 requests over two hours and matched nothing.
 	// 50 answers reliably; leave the headroom.
-	itemsPerPage    = 50
-	maxRetries      = 6
+	itemsPerPage = 50
+
+	// A DJEN 500 is usually permanent, not transient. Asked for a case it has no
+	// coverage of, DJEN errors instead of returning an empty list, and it does so
+	// every time: the same case number 500s on all four attempts, while a case it
+	// does cover answers 200 on all of them. Retrying is still worth a few tries
+	// for a genuine blip, but the ladder has to stay cheap, because most of what
+	// it retries will never succeed. At 6 retries capped at 60s, one uncovered
+	// case cost 63s of sleep; across the 317 cases we look up, that is hours of
+	// waiting for an answer that cannot change.
+	maxRetries      = 3
 	backoffInitial  = 1 * time.Second
-	backoffMax      = 60 * time.Second
+	backoffMax      = 8 * time.Second
 	requestInterval = time.Minute / 60 // ≤ 60 req/min self-imposed limit
 )
 
