@@ -35,7 +35,13 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
+    # The API keys (DataJud, Transparência) live only in .env. Without this, a
+    # worker run in the dev stack has no key and the only way to give it one is
+    # to type the secret on the command line, where it lands in shell history.
+    env_file: .env
     environment:
+      # These win over .env: inside the compose network the services are reachable
+      # by service name, not on localhost.
       DATABASE_URL: postgres://corruption:corruption@postgres:5432/corruption?sslmode=disable
       MEMGRAPH_URI: bolt://memgraph:7687
       MEMGRAPH_USER: ${MEMGRAPH_USER:-}

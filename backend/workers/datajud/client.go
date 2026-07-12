@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,12 +27,21 @@ const (
 	// blip silently dropped that case from the run and its conviction state simply
 	// stayed unknown.
 	maxRetries = 3
+
+	// A 429 is not a failure, it is "come back later", so it gets its own, more
+	// patient ladder. With the 5xx ladder (4 tries inside ~15s) a run bled cases:
+	// the 429s came in clusters on a single tribunal — tjba, tjap — which is a
+	// per-tribunal quota refusing a burst, not an outage. Giving up 15s into a
+	// quota window and skipping the case is how a run "succeeds" while quietly
+	// never reading whole tribunals.
+	maxRetries429 = 6
 )
 
 // var, not const: the tests wind the ladder down so they do not sleep.
 var (
 	backoffInitial = 1 * time.Second
 	backoffMax     = 16 * time.Second
+	backoffMax429  = 90 * time.Second
 )
 
 type Client struct {
@@ -141,9 +151,15 @@ func (c *Client) SearchByCaseNumber(ctx context.Context, tribunalEndpoint, caseN
 // retrying a bad request just annoys CNJ and cannot succeed.
 func (c *Client) post(ctx context.Context, url string, body []byte) ([]byte, error) {
 	backoff := backoffInitial
+	backoff429 := backoffInitial
 	var lastErr error
 
-	for attempt := 0; attempt <= maxRetries; attempt++ {
+	// Counted separately: a server that is refusing a burst and a server that is
+	// broken deserve different amounts of patience, and mixing the two means a
+	// stretch of 429s eats the budget a real outage needed.
+	fails, rateLimits := 0, 0
+
+	for {
 		if err := c.limiter.wait(ctx); err != nil {
 			return nil, err
 		}
@@ -158,17 +174,42 @@ func (c *Client) post(ctx context.Context, url string, body []byte) ([]byte, err
 		res, err := c.http.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("datajud: request: %w", err)
-			if err := sleepBackoff(ctx, &backoff); err != nil {
+			if fails++; fails > maxRetries {
+				break
+			}
+			if err := sleepBackoff(ctx, &backoff, backoffMax); err != nil {
 				return nil, err
 			}
 			continue
 		}
 
-		if res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500 {
+		if res.StatusCode == http.StatusTooManyRequests {
+			// The server usually says exactly how long to wait. Guessing when it has
+			// already told us is how you get another 429.
+			wait := retryAfter(res.Header.Get("Retry-After"))
 			_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 512))
 			res.Body.Close()
 			lastErr = fmt.Errorf("datajud: status %d", res.StatusCode)
-			if err := sleepBackoff(ctx, &backoff); err != nil {
+			if rateLimits++; rateLimits > maxRetries429 {
+				break
+			}
+			if wait <= 0 {
+				wait = nextBackoff(&backoff429, backoffMax429)
+			}
+			if err := sleepFor(ctx, wait); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		if res.StatusCode >= 500 {
+			_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 512))
+			res.Body.Close()
+			lastErr = fmt.Errorf("datajud: status %d", res.StatusCode)
+			if fails++; fails > maxRetries {
+				break
+			}
+			if err := sleepBackoff(ctx, &backoff, backoffMax); err != nil {
 				return nil, err
 			}
 			continue
@@ -184,17 +225,61 @@ func (c *Client) post(ctx context.Context, url string, body []byte) ([]byte, err
 	return nil, fmt.Errorf("datajud: exhausted retries: %w", lastErr)
 }
 
-func sleepBackoff(ctx context.Context, backoff *time.Duration) error {
-	t := time.NewTimer(*backoff)
+func sleepBackoff(ctx context.Context, backoff *time.Duration, max time.Duration) error {
+	return sleepFor(ctx, nextBackoff(backoff, max))
+}
+
+// nextBackoff returns the current delay and doubles it for the next call.
+func nextBackoff(backoff *time.Duration, max time.Duration) time.Duration {
+	d := *backoff
+	if d > max {
+		d = max
+	}
+	*backoff *= 2
+	if *backoff > max {
+		*backoff = max
+	}
+	return d
+}
+
+func sleepFor(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
 	defer t.Stop()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-t.C:
 	}
-	*backoff *= 2
-	if *backoff > backoffMax {
-		*backoff = backoffMax
-	}
 	return nil
+}
+
+// retryAfter parses the Retry-After header, which is either a delay in seconds or
+// an HTTP date. An unparseable or absurd value returns 0 so the caller falls back
+// to its own ladder: a server that asks us to wait an hour is not one we honour
+// blindly mid-run.
+func retryAfter(h string) time.Duration {
+	h = strings.TrimSpace(h)
+	if h == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(h); err == nil {
+		if secs < 0 {
+			return 0
+		}
+		return capDuration(time.Duration(secs) * time.Second)
+	}
+	if t, err := http.ParseTime(h); err == nil {
+		return capDuration(time.Until(t))
+	}
+	return 0
+}
+
+func capDuration(d time.Duration) time.Duration {
+	if d <= 0 {
+		return 0
+	}
+	if d > backoffMax429 {
+		return backoffMax429
+	}
+	return d
 }

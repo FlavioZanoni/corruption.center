@@ -207,7 +207,87 @@ func TestClient_SelfLimitsItsRequestRate(t *testing.T) {
 // withFastBackoff winds the retry ladder down so the tests do not sleep.
 func withFastBackoff(t *testing.T) {
 	t.Helper()
-	origInit, origMax := backoffInitial, backoffMax
-	t.Cleanup(func() { backoffInitial, backoffMax = origInit, origMax })
-	backoffInitial, backoffMax = time.Millisecond, 2*time.Millisecond
+	origInit, origMax, orig429 := backoffInitial, backoffMax, backoffMax429
+	t.Cleanup(func() {
+		backoffInitial, backoffMax, backoffMax429 = origInit, origMax, orig429
+	})
+	backoffInitial, backoffMax, backoffMax429 = time.Millisecond, 2*time.Millisecond, 4*time.Millisecond
+}
+
+// A 429 is a quota window, not an outage, so it must outlive the 5xx budget:
+// four tries inside ~15s is how a run skips whole tribunals (tjba, tjap) and
+// still reports success.
+func TestSearchByCaseNumber_OutlastsAQuotaWindowThatExceedsThe5xxBudget(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		// One more 429 than the 5xx ladder would ever tolerate.
+		if calls <= maxRetries+1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte(`{"hits":{"hits":[{"_source":{"numeroProcesso":"123"}}]}}`))
+	}))
+	defer server.Close()
+
+	c, err := NewClient(context.Background(), server.URL, "k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.limiter.min = 0
+	withFastBackoff(t)
+
+	src, err := c.SearchByCaseNumber(context.Background(), "api_publica_tjba", "123")
+	if err != nil {
+		t.Fatalf("a quota window longer than the 5xx budget must not drop the case: %v", err)
+	}
+	if src == nil || src.NumeroProcesso != "123" {
+		t.Fatalf("expected the case once the quota window passed, got %+v", src)
+	}
+}
+
+// When the server says how long to wait, guessing is how you earn another 429.
+func TestRetryAfter_HonoursTheServersDelayOverOurLadder(t *testing.T) {
+	got := retryAfter("2")
+	if got != 2*time.Second {
+		t.Fatalf("seconds form: want 2s, got %v", got)
+	}
+	if d := retryAfter(""); d != 0 {
+		t.Fatalf("absent header must fall back to our ladder (0), got %v", d)
+	}
+	if d := retryAfter("garbage"); d != 0 {
+		t.Fatalf("unparseable header must fall back to our ladder (0), got %v", d)
+	}
+	// A server asking us to sit out an hour mid-run is not honoured blindly.
+	if d := retryAfter("3600"); d != backoffMax429 {
+		t.Fatalf("absurd delay must be capped at %v, got %v", backoffMax429, d)
+	}
+}
+
+func TestSearchByCaseNumber_GivesUpOnAnEndlessQuotaWindow(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Retry-After", "1")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	c, err := NewClient(context.Background(), server.URL, "k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.limiter.min = 0
+	withFastBackoff(t)
+	// Retry-After is honoured, so cap it too or this test sleeps for 7 seconds.
+	orig := backoffMax429
+	backoffMax429 = 2 * time.Millisecond
+	t.Cleanup(func() { backoffMax429 = orig })
+
+	if _, err := c.SearchByCaseNumber(context.Background(), "api_publica_tjba", "123"); err == nil {
+		t.Fatal("an endless quota window must surface as an error, not hang forever")
+	}
+	if calls != maxRetries429+1 {
+		t.Fatalf("want %d attempts, got %d", maxRetries429+1, calls)
+	}
 }
