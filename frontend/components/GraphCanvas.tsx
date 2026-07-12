@@ -186,8 +186,6 @@ interface SimNode extends d3.SimulationNodeDatum {
 interface SimLink extends d3.SimulationLinkDatum<SimNode> {
   id: string;
   edgeType: string;
-  edgeStatus: string;
-  edgeReliability: string;
   color: string;
   width: number;
   opacity: number;
@@ -297,11 +295,6 @@ function applyVisibility(
       return "none";
     if (filters.nodeTypes[tgt.type as keyof typeof filters.nodeTypes] === false)
       return "none";
-    const status = d.edgeStatus as keyof typeof filters.edgeStatus;
-    const reliability = d.edgeReliability as keyof typeof filters.reliability;
-    if (filters.edgeStatus[status] === false) return "none";
-    if (reliability && filters.reliability[reliability] === false)
-      return "none";
     return "";
   });
 }
@@ -400,9 +393,6 @@ export function GraphCanvas() {
         source: e.from,
         target: e.to,
         edgeType: e.type,
-        edgeStatus: edgeOutcome(e) ?? "default",
-        edgeReliability:
-          (e.properties?.reliability as string | undefined) ?? "high",
         color: edgeColor(e),
         width: edgeWidth(e),
         opacity: edgeOpacity(e),

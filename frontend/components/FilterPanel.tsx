@@ -5,14 +5,6 @@ import { useAppStore } from "@/lib/store";
 import type { LayoutMode } from "@/lib/store";
 import { NODE_COLORS } from "@/lib/constants";
 
-// Edge status colors: kept local since they're only used here
-const EDGE_STATUS_COLORS: Record<string, string> = {
-  convicted: "#cc2222",
-  indicted: "#cc7722",
-  cited: "#ccaa22",
-  membership: "#444444",
-};
-
 const LAYOUT_MODES: { id: LayoutMode; label: string }[] = [
   { id: "force", label: "Orgânico" },
   { id: "cluster", label: "Clusters" },
@@ -82,8 +74,6 @@ export function FilterPanel() {
   const setFilterPanelOpen = useAppStore((s) => s.setFilterPanelOpen);
   const filters = useAppStore((s) => s.filters);
   const setNodeTypeFilter = useAppStore((s) => s.setNodeTypeFilter);
-  const setEdgeStatusFilter = useAppStore((s) => s.setEdgeStatusFilter);
-  const setReliabilityFilter = useAppStore((s) => s.setReliabilityFilter);
   const resetFilters = useAppStore((s) => s.resetFilters);
   const layoutMode = useAppStore((s) => s.layoutMode);
   const setLayoutMode = useAppStore((s) => s.setLayoutMode);
@@ -157,63 +147,6 @@ export function FilterPanel() {
               checked={filters.nodeTypes.legal_proceeding}
               onChange={(v) => setNodeTypeFilter("legal_proceeding", v)}
               color={NODE_COLORS.legal_proceeding}
-            />
-            <Toggle
-              label="Fonte"
-              checked={filters.nodeTypes.source}
-              onChange={(v) => setNodeTypeFilter("source", v)}
-              color={NODE_COLORS.source}
-            />
-            <Toggle
-              label="Sanções"
-              checked={filters.nodeTypes.sanction}
-              onChange={(v) => setNodeTypeFilter("sanction", v)}
-              color={NODE_COLORS.sanction}
-            />
-          </Section>
-
-          <Section title="Status da aresta">
-            <Toggle
-              label="Condenado"
-              checked={filters.edgeStatus.convicted}
-              onChange={(v) => setEdgeStatusFilter("convicted", v)}
-              color={EDGE_STATUS_COLORS.convicted}
-            />
-            <Toggle
-              label="Indiciado"
-              checked={filters.edgeStatus.indicted}
-              onChange={(v) => setEdgeStatusFilter("indicted", v)}
-              color={EDGE_STATUS_COLORS.indicted}
-            />
-            <Toggle
-              label="Citado"
-              checked={filters.edgeStatus.cited}
-              onChange={(v) => setEdgeStatusFilter("cited", v)}
-              color={EDGE_STATUS_COLORS.cited}
-            />
-            <Toggle
-              label="Membro"
-              checked={filters.edgeStatus.membership}
-              onChange={(v) => setEdgeStatusFilter("membership", v)}
-              color={EDGE_STATUS_COLORS.membership}
-            />
-          </Section>
-
-          <Section title="Confiabilidade da fonte">
-            <Toggle
-              label="Alta"
-              checked={filters.reliability.high}
-              onChange={(v) => setReliabilityFilter("high", v)}
-            />
-            <Toggle
-              label="Média"
-              checked={filters.reliability.medium}
-              onChange={(v) => setReliabilityFilter("medium", v)}
-            />
-            <Toggle
-              label="Baixa"
-              checked={filters.reliability.low}
-              onChange={(v) => setReliabilityFilter("low", v)}
             />
           </Section>
         </div>

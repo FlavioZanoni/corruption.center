@@ -158,35 +158,36 @@ export interface TimelineResponse extends GraphResponse {
 
 // ─── Filter state types (used in store) ──────────────────────────────────────
 
+// Only the node types the graph can actually draw. The canvas is fed by the
+// timeline, which returns scandals, their cases, and the parties to those cases -
+// so a `source` toggle filtered a node type that does not exist anywhere in the
+// database, and a `sanction` toggle filtered a type the timeline never returns.
+// Both hid nothing, whatever you clicked.
 export interface NodeTypeFilters {
   politician: boolean
   person: boolean
   scandal: boolean
   organization: boolean
   legal_proceeding: boolean
-  source: boolean
-  sanction: boolean
 }
 
-export interface EdgeStatusFilters {
-  convicted: boolean
-  indicted: boolean
-  cited: boolean
-  membership: boolean
-}
-
-export type ReliabilityLevel = "high" | "medium" | "low"
-
-export interface ReliabilityFilters {
-  high: boolean
-  medium: boolean
-  low: boolean
-}
-
+// EdgeStatusFilters and ReliabilityFilters are gone.
+//
+// Edge status offered Condenado / Indiciado / Citado / Membro. The only outcome
+// any worker writes is "cited": there is no convicted, no indicted, no
+// membership, so three of the four checkboxes could never match an edge and the
+// fourth could only ever hide everything. Conviction is not an edge property at
+// all - it lives on the proceeding, as LegalProceeding.has_conviction - so an
+// edge-level conviction filter was never going to work.
+//
+// Reliability offered Alta / Média / Baixa against a `reliability` property that
+// exists on exactly zero edges.
+//
+// They are not commented-out for later: a filter that hides nothing is worse than
+// a missing one, because the user believes the graph they are looking at has been
+// filtered. Bring them back when something writes the data they filter on.
 export interface ActiveFilters {
   nodeTypes: NodeTypeFilters
-  edgeStatus: EdgeStatusFilters
-  reliability: ReliabilityFilters
 }
 
 export interface TimelineRange {

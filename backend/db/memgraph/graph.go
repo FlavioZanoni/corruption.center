@@ -219,7 +219,15 @@ func neoNodeToModel(n neo4j.Node) models.Node {
 		name = strProp(n.Props, "case_number")
 	}
 	if name == "" {
-		name = strProp(n.Props, "registry")
+		// A Sanction has no name, and its registry alone ("CEAF", "CEIS") is the
+		// same for tens of thousands of them — as a search result that is not a
+		// label, it is a category. Say what the sanction actually was.
+		if registry := strProp(n.Props, "registry"); registry != "" {
+			name = registry
+			if kind := strProp(n.Props, "sanction_type"); kind != "" {
+				name = registry + " · " + kind
+			}
+		}
 	}
 	if name == "" {
 		name = id

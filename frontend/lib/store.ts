@@ -4,8 +4,6 @@ import type {
   ActiveFilters,
   TimelineRange,
   NodeTypeFilters,
-  EdgeStatusFilters,
-  ReliabilityFilters,
 } from "@/lib/types"
 
 export type LayoutMode = "force" | "cluster" | "radial" | "timeline"
@@ -18,27 +16,10 @@ const defaultNodeTypeFilters: NodeTypeFilters = {
   scandal: true,
   organization: true,
   legal_proceeding: true,
-  source: true,
-  sanction: true,
-}
-
-const defaultEdgeStatusFilters: EdgeStatusFilters = {
-  convicted: true,
-  indicted: true,
-  cited: true,
-  membership: true,
-}
-
-const defaultReliabilityFilters: ReliabilityFilters = {
-  high: true,
-  medium: true,
-  low: true,
 }
 
 const defaultFilters: ActiveFilters = {
   nodeTypes: defaultNodeTypeFilters,
-  edgeStatus: defaultEdgeStatusFilters,
-  reliability: defaultReliabilityFilters,
 }
 
 const defaultTimelineRange: TimelineRange = {
@@ -80,8 +61,6 @@ interface AppState {
   setSearchQuery: (query: string) => void
 
   setNodeTypeFilter: (type: keyof NodeTypeFilters, value: boolean) => void
-  setEdgeStatusFilter: (status: keyof EdgeStatusFilters, value: boolean) => void
-  setReliabilityFilter: (level: keyof ReliabilityFilters, value: boolean) => void
   resetFilters: () => void
 
   setTimelineRange: (range: TimelineRange) => void
@@ -121,22 +100,6 @@ export const useAppStore = create<AppState>((set) => ({
       filters: {
         ...state.filters,
         nodeTypes: { ...state.filters.nodeTypes, [type]: value },
-      },
-    })),
-
-  setEdgeStatusFilter: (status, value) =>
-    set((state) => ({
-      filters: {
-        ...state.filters,
-        edgeStatus: { ...state.filters.edgeStatus, [status]: value },
-      },
-    })),
-
-  setReliabilityFilter: (level, value) =>
-    set((state) => ({
-      filters: {
-        ...state.filters,
-        reliability: { ...state.filters.reliability, [level]: value },
       },
     })),
 
