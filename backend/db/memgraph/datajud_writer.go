@@ -12,7 +12,8 @@ import (
 type DataJudProceedingUpsert struct {
 	CaseNumber string
 	Court      string
-	Type       string
+	Type       string // TPU class code, e.g. "283"
+	ClassName  string // TPU class name, e.g. "Ação Penal - Procedimento Ordinário"
 	Status     string
 	Assuntos   []string
 	DateFiled  *time.Time
@@ -32,6 +33,7 @@ ON CREATE SET lp.id = $id, lp.status = 'ongoing'
 SET
   lp.court = CASE WHEN $court = '' THEN lp.court ELSE $court END,
   lp.type = CASE WHEN $type = '' THEN lp.type ELSE $type END,
+  lp.class_name = CASE WHEN $class_name = '' THEN lp.class_name ELSE $class_name END,
   lp.status = CASE WHEN $status = '' THEN lp.status ELSE $status END,
   lp.assuntos = CASE WHEN $assuntos IS NULL OR size($assuntos) = 0 THEN lp.assuntos ELSE $assuntos END,
   lp.date_filed = CASE WHEN $date_filed IS NULL THEN lp.date_filed ELSE $date_filed END
@@ -48,6 +50,7 @@ RETURN lp.id AS id
 		"case_number": p.CaseNumber,
 		"court":       p.Court,
 		"type":        p.Type,
+		"class_name":  p.ClassName,
 		"status":      p.Status,
 		"assuntos":    p.Assuntos,
 		"date_filed":  dateFiled,

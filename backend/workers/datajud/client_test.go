@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewClient(t *testing.T) {
@@ -127,4 +128,86 @@ func TestSearchByCaseNumber_DecodeError(t *testing.T) {
 	if _, err := c.SearchByCaseNumber(context.Background(), "trf4", "x"); err == nil {
 		t.Fatalf("expected decode error")
 	}
+}
+
+// A 429 or a transient 5xx used to end a case lookup outright — the client had no
+// retry at all, so one blip silently dropped that case and its conviction state
+// stayed unknown forever.
+func TestSearchByCaseNumber_RetriesRateLimitAndServerErrors(t *testing.T) {
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusBadGateway} {
+		var calls int
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			if calls < 3 {
+				w.WriteHeader(status)
+				return
+			}
+			_, _ = w.Write([]byte(`{"hits":{"hits":[{"_source":{"numeroProcesso":"123"}}]}}`))
+		}))
+
+		c, err := NewClient(context.Background(), server.URL, "key")
+		if err != nil {
+			t.Fatalf("NewClient: %v", err)
+		}
+		c.limiter.min = 0 // no wall-clock pacing in tests
+		withFastBackoff(t)
+
+		src, err := c.SearchByCaseNumber(context.Background(), "api_publica_trf4", "123")
+		server.Close()
+		if err != nil {
+			t.Fatalf("status %d should have been retried, got: %v", status, err)
+		}
+		if src == nil || src.NumeroProcesso != "123" {
+			t.Fatalf("status %d: expected the case after retry, got %+v", status, src)
+		}
+		if calls != 3 {
+			t.Errorf("status %d: expected 3 attempts, got %d", status, calls)
+		}
+	}
+}
+
+// A 4xx that is not 429 is our bad request. Retrying it cannot succeed and only
+// adds load to a government API, so it must surface at once.
+func TestSearchByCaseNumber_ClientErrorDoesNotRetry(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.Error(w, "bad request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	c, _ := NewClient(context.Background(), server.URL, "key")
+	c.limiter.min = 0
+	withFastBackoff(t)
+
+	if _, err := c.SearchByCaseNumber(context.Background(), "api_publica_trf4", "123"); err == nil {
+		t.Fatal("expected a 400 to surface")
+	}
+	if calls != 1 {
+		t.Errorf("a 400 must not be retried, got %d attempts", calls)
+	}
+}
+
+// The watcher polls hundreds of cases in a run against an API that publishes no
+// rate limit. Losing the self-imposed one would let it hammer CNJ as fast as it
+// can loop, which is exactly what it used to do.
+func TestClient_SelfLimitsItsRequestRate(t *testing.T) {
+	c, err := NewClient(context.Background(), "https://example.test", "key")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if c.limiter == nil || c.limiter.min <= 0 {
+		t.Fatal("client must pace its own requests: DataJud publishes no limit, so we impose one")
+	}
+	if perMin := time.Minute / c.limiter.min; perMin > 60 {
+		t.Errorf("client would send %d req/min; keep it at or under 60", perMin)
+	}
+}
+
+// withFastBackoff winds the retry ladder down so the tests do not sleep.
+func withFastBackoff(t *testing.T) {
+	t.Helper()
+	origInit, origMax := backoffInitial, backoffMax
+	t.Cleanup(func() { backoffInitial, backoffMax = origInit, origMax })
+	backoffInitial, backoffMax = time.Millisecond, 2*time.Millisecond
 }

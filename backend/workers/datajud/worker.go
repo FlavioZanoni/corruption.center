@@ -171,6 +171,7 @@ func (w *Worker) applyCaseWrites(ctx context.Context, c psql.WatcherCase, src *C
 		CaseNumber: src.NumeroProcesso,
 		Court:      courtName(src.OrgaoJulgador),
 		Type:       proceedingTypeFromClasse(src.Classe),
+		ClassName:  proceedingClassName(src.Classe),
 		Status:     "ongoing",
 		Assuntos:   assuntosCodes(src.Assuntos),
 		DateFiled:  parseDate(src.DataAjuizamento),
@@ -458,6 +459,15 @@ func proceedingTypeFromClasse(classe map[string]any) string {
 		return code
 	}
 	return "criminal"
+}
+
+// proceedingClassName is the human name of the class ("Ação Penal - Procedimento
+// Ordinário"). DataJud sends it right beside the code and we used to throw it
+// away, keeping only "283" — so a case could be labelled nothing better than a
+// TPU number, and the graph showed the reader a code where it meant to show them
+// what kind of case they were looking at.
+func proceedingClassName(classe map[string]any) string {
+	return mapString(classe, "nome")
 }
 
 func assuntosCodes(assuntos []map[string]any) []string {

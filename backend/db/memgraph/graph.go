@@ -236,7 +236,7 @@ func neoNodeToModel(n neo4j.Node) models.Node {
 	id, _ := n.Props["id"].(string)
 	name := strProp(n.Props, "name")
 	if name == "" {
-		name = strProp(n.Props, "case_number")
+		name = proceedingLabel(n.Props)
 	}
 	if name == "" {
 		// A Sanction has no name, and its registry alone ("CEAF", "CEIS") is the

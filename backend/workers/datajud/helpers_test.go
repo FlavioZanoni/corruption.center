@@ -61,8 +61,8 @@ func TestAssuntosCodes(t *testing.T) {
 	assuntos := []map[string]any{
 		{"codigo": "100"},
 		{"codigo": float64(200)},
-		{"codigo": ""},  // empty skipped
-		{"nome": "x"},   // no codigo → "<nil>" skipped
+		{"codigo": ""}, // empty skipped
+		{"nome": "x"},  // no codigo → "<nil>" skipped
 	}
 	got := assuntosCodes(assuntos)
 	if len(got) != 2 || got[0] != "100" || got[1] != "200" {
