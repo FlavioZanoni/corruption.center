@@ -6,27 +6,11 @@ import { BrowseNav } from "@/components/BrowseNav";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Search, ExternalLink, Ban } from "lucide-react";
 import { fetchSanctions, fetchSanctionRegistries } from "@/lib/api/sanctions";
-import { NODE_COLORS } from "@/lib/constants";
 import { formatDocument } from "@/lib/format";
+import { entityHref } from "@/components/EntityUI";
 import type { SanctionListItem, SanctionRegistry } from "@/lib/types";
 
 const PAGE_SIZE = 24;
-
-/**
- * Get the entity URL based on sanctioned type and ID.
- */
-function getEntityUrl(sanctionedType: string, sanctionedId: string): string | null {
-  switch (sanctionedType.toLowerCase()) {
-    case "politician":
-      return `/politico/${sanctionedId}`;
-    case "person":
-      return `/pessoa/${sanctionedId}`;
-    case "organization":
-      return `/organizacao/${sanctionedId}`;
-    default:
-      return null;
-  }
-}
 
 /**
  * Get the display name for a sanction subject.
@@ -44,11 +28,9 @@ function getSanctionSubject(item: SanctionListItem): string {
 }
 
 function SanctionCard({ item }: { item: SanctionListItem }) {
-  const entityUrl = getEntityUrl(item.sanctioned_type, item.sanctioned_id);
+  const entityUrl = entityHref(item.sanctioned_type.toLowerCase(), item.sanctioned_id);
   const subject = getSanctionSubject(item);
-  const ring = NODE_COLORS.sanction;
 
-  // Format dates
   const dateStart = item.date_start
     ? new Date(item.date_start).toLocaleDateString("pt-BR")
     : "";
@@ -56,48 +38,56 @@ function SanctionCard({ item }: { item: SanctionListItem }) {
     ? new Date(item.date_end).toLocaleDateString("pt-BR")
     : "";
 
-  const cardContent = (
-    <div className="flex flex-col gap-2 p-4 bg-surface border border-border rounded-sm hover:border-[#c8a96e]/60 hover:bg-[#161616] transition-colors group h-full">
-      {/* Sanctioned party */}
+  // The card is a plain <div> with SIBLING links, not a <Link> wrapping the whole
+  // thing. Wrapping put the "registro oficial" anchor inside the entity anchor —
+  // an <a> inside an <a>, which is invalid HTML and breaks hydration. It also stole
+  // the click: the one link a reader most wants (the official record) was
+  // unreachable, because the outer link swallowed it.
+  return (
+    <div className="flex flex-col gap-2 p-4 bg-surface border border-border rounded-sm hover:border-[#c8a96e]/60 transition-colors group h-full">
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-serif text-text leading-tight group-hover:text-white truncate">
-          {subject}
-        </div>
+        {entityUrl ? (
+          <Link
+            href={entityUrl}
+            className="text-sm font-serif text-text leading-tight hover:text-white block truncate"
+          >
+            {subject}
+          </Link>
+        ) : (
+          <div className="text-sm font-serif text-text leading-tight truncate">
+            {subject}
+          </div>
+        )}
         <div className="text-[10px] font-mono text-text-muted uppercase tracking-wider mt-1 truncate">
-          {[item.registry, item.organ].filter(Boolean).join(" · ")}
+          {[item.registry, item.organ].filter(Boolean).join(" \u00b7 ")}
         </div>
       </div>
 
-      {/* Sanction type */}
       {item.sanction_type && (
-        <div className="text-[10px] font-mono text-text-dim truncate">
+        <Link
+          href={`/sancao/${encodeURIComponent(item.id)}`}
+          className="text-[10px] font-mono text-text-dim hover:text-white truncate"
+        >
           {item.sanction_type}
-        </div>
+        </Link>
       )}
 
-      {/* Period */}
       {(dateStart || dateEnd) && (
         <div className="text-[10px] font-mono text-text-dim mt-0.5">
-          {dateStart && dateEnd ? (
-            <>
-              {dateStart} — {dateEnd}
-            </>
-          ) : dateStart ? (
-            <>Desde {dateStart}</>
-          ) : (
-            <>Até {dateEnd}</>
-          )}
+          {dateStart && dateEnd
+            ? `${dateStart} \u2014 ${dateEnd}`
+            : dateStart
+              ? `Desde ${dateStart}`
+              : `At\u00e9 ${dateEnd}`}
         </div>
       )}
 
-      {/* Process reference */}
       {item.process_ref && (
         <div className="text-[10px] font-mono text-text-dim truncate">
           Ref: {item.process_ref}
         </div>
       )}
 
-      {/* External link */}
       {item.source_url && (
         <a
           href={item.source_url}
@@ -112,17 +102,6 @@ function SanctionCard({ item }: { item: SanctionListItem }) {
       )}
     </div>
   );
-
-  // Wrap in link if entity URL exists, otherwise just return div
-  if (entityUrl) {
-    return (
-      <Link href={entityUrl}>
-        {cardContent}
-      </Link>
-    );
-  }
-
-  return cardContent;
 }
 
 export default function SanctionsBrowsePage() {

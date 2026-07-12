@@ -35,6 +35,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     {
+      url: siteUrl("/processos"),
+      lastModified,
+      changeFrequency: "daily",
+      priority: 0.9,
+    },
+    {
+      url: siteUrl("/sancoes"),
+      lastModified,
+      changeFrequency: "daily",
+      priority: 0.9,
+    },
+    {
       url: siteUrl("/metodologia"),
       lastModified,
       changeFrequency: "monthly",
@@ -45,9 +57,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Both endpoints are enumerated concurrently. Each one degrades to an empty
   // list on failure, so a missing /scandals endpoint (it is still being added)
   // costs us those URLs instead of breaking the build.
-  const [politicianIds, scandalIds] = await Promise.all([
+  // The browse pages paginate client-side, so a crawler cannot walk them: the
+  // sitemap is the ONLY way a case or a sanction page is ever discovered.
+  //
+  // /pessoa is deliberately absent. Those are private citizens whose name a court
+  // publication printed; they are noindex and robots-disallowed (see robots.ts).
+  // Listing them here would be asking a crawler to index the one thing we have
+  // decided it must not.
+  const [politicianIds, scandalIds, proceedingIds] = await Promise.all([
     fetchAllIds("/api/v1/politicians"),
     fetchAllIds("/api/v1/scandals"),
+    fetchAllIds("/api/v1/proceedings"),
   ])
 
   const politicianRoutes: MetadataRoute.Sitemap = politicianIds.map((id) => ({
@@ -65,10 +85,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }))
 
-  const routes = [...staticRoutes, ...scandalRoutes, ...politicianRoutes]
+  // A court case IS the public record: the case number, the court and the class are
+  // all published by the CNJ. These are safe to index and are what a reader looking
+  // for a case will actually search for.
+  const proceedingRoutes: MetadataRoute.Sitemap = proceedingIds.map((id) => ({
+    url: siteUrl(`/processo/${id}`),
+    lastModified,
+    changeFrequency: "weekly",
+    priority: 0.6,
+  }))
+
+  const routes = [
+    ...staticRoutes,
+    ...scandalRoutes,
+    ...politicianRoutes,
+    ...proceedingRoutes,
+  ]
 
   console.log(
-    `[sitemap] ${routes.length} URLs (${staticRoutes.length} static, ${scandalRoutes.length} scandals, ${politicianRoutes.length} politicians)`,
+    `[sitemap] ${routes.length} URLs (${staticRoutes.length} static, ${scandalRoutes.length} scandals, ${politicianRoutes.length} politicians, ${proceedingRoutes.length} proceedings)`,
   )
 
   if (routes.length > MAX_SITEMAP_URLS) {

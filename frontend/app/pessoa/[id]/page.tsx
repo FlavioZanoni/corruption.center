@@ -58,6 +58,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title,
     description,
+    // NOINDEX, deliberately. A Person here is, overwhelmingly, a private citizen
+    // whose name DJEN printed in a court publication — the DEFENDANT_IN edge says
+    // "cited", not accused, not charged, not convicted. Letting a search engine
+    // surface "corruption.center — <their name>" is exactly the harm the page's own
+    // disclaimer exists to prevent, except permanent, and reaching people who never
+    // read the disclaimer. The page stays reachable and linkable so a reader who
+    // follows a case can see who was named; it just does not become the first
+    // result for a stranger's name. Politicians (public figures), companies, cases
+    // and sanctions are all indexed — this exception is only for private people.
+    robots: { index: false, follow: true },
     alternates: { canonical: url },
     openGraph: {
       type: "profile",

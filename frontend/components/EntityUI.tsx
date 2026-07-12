@@ -275,6 +275,17 @@ export function SanctionCard({ node }: { node: GraphNode }) {
       <Field label="Vigência" value={period || undefined} />
       <Field label="Processo de referência" value={processRef} />
       <div className="mt-2 flex flex-wrap items-center gap-2">
+        {/* The sanction's own page. Without this link the 64,779 sanction pages have
+            no inbound link from any indexed page — the browse paginates client-side,
+            so a crawler cannot walk it — and they are too many to list in the
+            sitemap (the protocol caps it at 50,000). A page nothing links to and no
+            sitemap names does not exist. */}
+        <Link
+          href={`/sancao/${encodeURIComponent(node.id)}`}
+          className="font-mono text-[11px] text-text-muted transition-colors hover:text-white"
+        >
+          Detalhes
+        </Link>
         {sourceUrl && (
           <a
             href={sourceUrl}
