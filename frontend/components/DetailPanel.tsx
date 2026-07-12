@@ -19,6 +19,7 @@ import { useAppStore } from "@/lib/store";
 import { fetchExpandGraph } from "@/lib/api/graph";
 import type { GraphNode, GraphEdge } from "@/lib/types";
 import { NODE_COLORS } from "@/lib/constants";
+import { NODE_TYPE_LABELS, EDGE_TYPE_LABELS } from "@/lib/entity-labels";
 import { ProvenanceBadge, ReviewBadge } from "@/components/ProvenanceBadge";
 import { porExtenso, estilo } from "numero-por-extenso";
 
@@ -56,29 +57,6 @@ function isUnconfirmed(node: GraphNode | null): boolean {
   if (node.type === "sanction") return true;
   return Boolean(node.properties.provenance_source);
 }
-
-const NODE_TYPE_LABELS: Record<string, string> = {
-  politician: "Político",
-  person: "Pessoa",
-  scandal: "Escândalo",
-  organization: "Organização",
-  legal_proceeding: "Processo",
-  source: "Fonte",
-  sanction: "Sanção",
-};
-
-const EDGE_TYPE_LABELS: Record<string, string> = {
-  INVOLVED_IN: "Envolvido em",
-  DEFENDANT_IN: "Réu em",
-  MEMBER_OF: "Membro de",
-  CONTROLS: "Controla",
-  OWNED_BY: "Pertence a",
-  IMPLICATED_IN: "Implicado em",
-  INVESTIGATES: "Investigado por",
-  RELATED_TO: "Relacionado a",
-  SUPPORTS: "Apoia",
-  SANCTIONED_IN: "Sancionado em",
-};
 
 const PROP_LABELS: Record<string, string> = {
   party: "Partido",

@@ -7,13 +7,10 @@ import { useAppStore } from "@/lib/store";
 import { searchNodes } from "@/lib/api/search";
 import type { SearchResult } from "@/lib/types";
 
-const NODE_TYPE_LABELS: Record<string, string> = {
-  politician: "Político",
-  scandal: "Escândalo",
-  organization: "Organização",
-  legal_proceeding: "Processo",
-  sanction: "Sanção",
-};
+// Imported, not redeclared. This file used to keep its own copy that was missing
+// "person" — so a person, of which the graph holds 19,416, rendered a badge
+// reading "person" in English on a pt-BR site.
+import { NODE_TYPE_LABELS } from "@/lib/entity-labels";
 
 // ─── Open-source credits modal ────────────────────────────────────────────────
 

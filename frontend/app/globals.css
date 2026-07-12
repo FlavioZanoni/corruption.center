@@ -20,11 +20,18 @@
   --color-edge-cited: #ccaa22;
   --color-edge-membership: #444444;
 
-  /* Node type colors */
-  --color-node-politician: #4488ff;
-  --color-node-scandal: #ff4444;
-  --color-node-organization: #33cc88;
-  --color-node-legal: #aa66ff;
+  /* Node type colors.
+     These MUST equal NODE_COLORS in lib/constants.ts, which the graph canvas and
+     the detail panel's avatar ring both read. They did not: a politician's icon
+     came out blue here while the ring beside it, in the same panel, came out gold
+     — one entity, two colours, because the palette was declared twice and only
+     one copy called itself the source of truth. */
+  --color-node-politician: #c8a96e;
+  --color-node-person: #6dbf8f;
+  --color-node-scandal: #e05252;
+  --color-node-organization: #5b9bd5;
+  --color-node-legal: #8b7ec8;
+  --color-node-sanction: #d98a4b;
 
   --font-sans: system-ui, sans-serif;
   --font-serif: var(--font-serif);

@@ -2,13 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { ArrowLeft, Search, Ban, Scale, Share2 } from "lucide-react";
 import { fetchPoliticians } from "@/lib/api/politicians";
-import { useAppStore } from "@/lib/store";
 import { NODE_COLORS } from "@/lib/constants";
-import type { PoliticianListItem, GraphNode } from "@/lib/types";
+import type { PoliticianListItem } from "@/lib/types";
 
 const PAGE_SIZE = 24;
 
@@ -19,17 +17,11 @@ const UFS = [
   "SP", "SE", "TO",
 ];
 
-function PoliticianCard({
-  item,
-  onOpen,
-}: {
-  item: PoliticianListItem;
-  onOpen: (item: PoliticianListItem) => void;
-}) {
+function PoliticianCard({ item }: { item: PoliticianListItem }) {
   const ring = NODE_COLORS.politician;
   return (
-    <button
-      onClick={() => onOpen(item)}
+    <Link
+      href={`/politico/${item.id}`}
       className="flex flex-col items-center text-center gap-2 p-4 bg-surface border border-border rounded-sm hover:border-[#c8a96e]/60 hover:bg-[#161616] transition-colors group"
     >
       <div
@@ -101,13 +93,11 @@ function PoliticianCard({
           )}
         </div>
       )}
-    </button>
+    </Link>
   );
 }
 
 export default function PoliticiansBrowsePage() {
-  const router = useRouter();
-  const setSelectedNode = useAppStore((s) => s.setSelectedNode);
 
   const [filterInput, setFilterInput] = useState("");
   const [filter, setFilter] = useState("");
@@ -136,24 +126,6 @@ export default function PoliticiansBrowsePage() {
     () => (data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1),
     [data],
   );
-
-  function openInGraph(item: PoliticianListItem) {
-    const node: GraphNode = {
-      id: item.id,
-      type: "politician",
-      label: item.name,
-      properties: {
-        name: item.name,
-        party_current: item.party_current,
-        role_current: item.role_current,
-        state: item.state,
-        photo_url: item.photo_url,
-        photo_attribution: item.photo_attribution,
-      },
-    };
-    setSelectedNode(node);
-    router.push("/");
-  }
 
   return (
     <main className="h-screen overflow-y-auto bg-bg text-text">
@@ -247,7 +219,7 @@ export default function PoliticiansBrowsePage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {data?.items.map((item) => (
-                <PoliticianCard key={item.id} item={item} onOpen={openInGraph} />
+                <PoliticianCard key={item.id} item={item} />
               ))}
             </div>
 
