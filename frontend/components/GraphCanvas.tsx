@@ -88,20 +88,27 @@ const EDGE_STRENGTH: Record<string, number> = {
   default: 0.5,
 };
 
+// The backend calls this property `outcome`, and always has - no edge in the
+// graph has ever carried a `status`. Reading `status` therefore did not weaken
+// the encoding, it disabled it: every edge fell through to `default`, so the
+// conviction weight above was never once applied and the edge-status filters in
+// FilterPanel silently matched nothing.
+function edgeOutcome(edge: GraphEdge): string | undefined {
+  return edge.properties?.outcome as string | undefined;
+}
+
 function edgeColor(edge: GraphEdge): string {
-  const s = edge.properties?.status as string | undefined;
+  const s = edgeOutcome(edge);
   if (s && EDGE_COLORS[s]) return EDGE_COLORS[s];
   return EDGE_COLORS[edge.type] ?? EDGE_COLORS.default;
 }
 
 function edgeWidth(edge: GraphEdge): number {
-  const s = edge.properties?.status as string | undefined;
-  return EDGE_WIDTH[s ?? ""] ?? EDGE_WIDTH.default;
+  return EDGE_WIDTH[edgeOutcome(edge) ?? ""] ?? EDGE_WIDTH.default;
 }
 
 function edgeOpacity(edge: GraphEdge): number {
-  const s = edge.properties?.status as string | undefined;
-  return EDGE_OPACITY[s ?? ""] ?? EDGE_OPACITY.default;
+  return EDGE_OPACITY[edgeOutcome(edge) ?? ""] ?? EDGE_OPACITY.default;
 }
 
 function edgeDistance(edge: GraphEdge): number {
@@ -385,7 +392,7 @@ export function GraphCanvas() {
         source: e.from,
         target: e.to,
         edgeType: e.type,
-        edgeStatus: (e.properties?.status as string | undefined) ?? "default",
+        edgeStatus: edgeOutcome(e) ?? "default",
         edgeReliability:
           (e.properties?.reliability as string | undefined) ?? "high",
         color: edgeColor(e),

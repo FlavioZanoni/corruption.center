@@ -83,12 +83,21 @@ func (db *DB) QueryScandals(ctx context.Context, sort string, page, pageSize int
 		return nil, fmt.Errorf("memgraph: count scandals rows: %w", err)
 	}
 
+	// politician_count counted only INVOLVED_IN, which no worker writes, so it read
+	// 0 on every scandal while proceeding_count beside it was correct — a silent
+	// zero, not an obvious break. A politician reaches a scandal either directly
+	// (a human links them in the backoffice) or by being a defendant in one of its
+	// cases, so count both. count(DISTINCT p) over one pattern is what de-duplicates
+	// someone who is both; collecting the two paths separately and adding them would
+	// count that person twice.
 	res, err := session.Run(ctx, fmt.Sprintf(`
     MATCH (s:Scandal)
-    OPTIONAL MATCH (p:Politician)-[:INVOLVED_IN]->(s)
     OPTIONAL MATCH (lp:LegalProceeding)-[:INVESTIGATES]->(s)
-    WITH s, count(DISTINCT p) AS politician_count,
-         count(DISTINCT lp) AS proceeding_count
+    WITH s, count(DISTINCT lp) AS proceeding_count
+    OPTIONAL MATCH (p:Politician)
+    WHERE (p)-[:INVOLVED_IN]->(s)
+       OR (p)-[:DEFENDANT_IN]->(:LegalProceeding)-[:INVESTIGATES]->(s)
+    WITH s, proceeding_count, count(DISTINCT p) AS politician_count
     RETURN s, politician_count, proceeding_count
     ORDER BY %s
     SKIP $skip LIMIT $limit

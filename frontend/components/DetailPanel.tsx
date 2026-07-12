@@ -201,7 +201,9 @@ const PROP_VALUES: Record<string, string> = {
 };
 
 function edgeStatusColor(properties: Record<string, unknown>): string {
-  const status = properties.status as string | undefined;
+  // The backend property is `outcome`; nothing has ever written `status`, so the
+  // old read here always fell through to the grey default.
+  const status = properties.outcome as string | undefined;
   switch (status) {
     case "convicted":
       return "#cc2222";
