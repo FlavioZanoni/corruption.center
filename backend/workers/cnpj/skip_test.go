@@ -2,6 +2,10 @@ package cnpj
 
 import (
 	"context"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -57,5 +61,41 @@ func TestHandleCompanySkipsTombstoned(t *testing.T) {
 	}
 	if stats.OrgsChained != 0 {
 		t.Fatalf("purged partner must not create an Org, got %d", stats.OrgsChained)
+	}
+}
+
+// A CNPJ the provider refuses must be skipped, not fatal. A live run died on
+// "CNPJ 01.006.599/0001-02 inválido" — a bad check digit in the CGU source data,
+// which we cannot fix and which will be just as bad tomorrow — and discarded the
+// other 14,000 companies after naming 390.
+//
+// DryRun + SingleCNPJ is the one path that never touches memgraph, so the guard can
+// be exercised with a nil *memgraph.DB: if the skip regresses, this panics or fails
+// rather than silently passing.
+func TestRunSkipsACNPJTheProviderRefuses(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"message":"CNPJ 01.006.599/0001-02 inválido."}`))
+	}))
+	defer server.Close()
+
+	w := &Worker{
+		pg:     &fakeStore{},
+		client: NewClient(server.URL, 600),
+		log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	stats, err := w.Run(context.Background(), Options{
+		SingleCNPJ: "01006599000102",
+		DryRun:     true,
+	})
+	if err != nil {
+		t.Fatalf("a refused CNPJ must not end the run: %v", err)
+	}
+	if stats.FetchErrors != 1 {
+		t.Fatalf("want the refusal counted (FetchErrors=1), got %d", stats.FetchErrors)
+	}
+	if stats.OrgsEnriched != 0 {
+		t.Fatalf("nothing was enriched, got OrgsEnriched=%d", stats.OrgsEnriched)
 	}
 }

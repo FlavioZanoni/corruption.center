@@ -59,6 +59,10 @@ type RunStats struct {
 	// SkippedTombstoned counts QSA members whose subject was LGPD-purged: the
 	// Person/Organization node is NOT re-created (resurrection guard, migration 008).
 	SkippedTombstoned int `json:"skipped_tombstoned"`
+	// FetchErrors counts CNPJs the provider would not enrich (a malformed document in
+	// the source data, a transient failure). They are skipped, not fatal — the run
+	// used to die on the first one.
+	FetchErrors int `json:"fetch_errors"`
 }
 
 func NewWorker(pg *psql.DB, mg *memgraph.DB, opts Options) *Worker {
@@ -100,7 +104,19 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 
 		children, err := w.enrichOne(ctx, opts, j, stats)
 		if err != nil {
-			return nil, err
+			// One unenrichable CNPJ must not discard the run. A live pass died on
+			// "CNPJ 01.006.599/0001-02 inválido" — a bad check digit in the CGU data,
+			// which we do not get to fix and which will still be bad tomorrow — and
+			// took the other 14,000 companies with it after naming 390.
+			//
+			// A cancelled context is different: that is us stopping, not the record
+			// being bad, and it must still end the run.
+			if ctx.Err() != nil {
+				return nil, err
+			}
+			stats.FetchErrors++
+			w.log.Warn("cnpj: enrichment failed, skipping", "cnpj", j.cnpj, "err", err)
+			continue
 		}
 		// Bounded-depth expansion only happens on real writes; dry-run reports the
 		// root(s) only (see enrichOne).
