@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { formatCNJ } from "@/lib/format";
 import { BrowseNav } from "@/components/BrowseNav";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Search, Scale } from "lucide-react";
 import { fetchProceedings } from "@/lib/api/proceedings";
-import { NODE_COLORS } from "@/lib/constants";
 import type { ProceedingListItem } from "@/lib/types";
 
 const PAGE_SIZE = 24;
@@ -50,16 +50,18 @@ function ProceedingCard({ item }: { item: ProceedingListItem }) {
     }
   }, [item.polled, item.has_conviction])
 
-  const ring = NODE_COLORS.legal_proceeding
+  // The whole card is the link: a list of 6,506 cases you can read but not open is
+  // a catalogue of dead ends. There is no nested anchor here, so wrapping is safe.
   return (
-    <div
+    <Link
+      href={`/processo/${encodeURIComponent(item.id)}`}
       className="flex flex-col gap-2 p-4 bg-surface border border-border rounded-sm hover:border-[#c8a96e]/60 hover:bg-[#161616] transition-colors group"
       style={{ borderColor: convictionState.color }}
     >
       {/* Case number and court */}
       <div className="min-w-0">
         <div className="text-sm font-serif text-text leading-tight group-hover:text-white truncate">
-          {item.case_number}
+          {formatCNJ(item.case_number)}
         </div>
         <div className="text-[10px] font-mono text-text-muted uppercase tracking-wider mt-1 truncate">
           {[item.court, item.type].filter(Boolean).join(" · ")}
@@ -82,7 +84,7 @@ function ProceedingCard({ item }: { item: ProceedingListItem }) {
         <Scale size={10} strokeWidth={1.5} />
         {convictionState.label}
       </div>
-    </div>
+    </Link>
   );
 }
 

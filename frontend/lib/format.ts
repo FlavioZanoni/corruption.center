@@ -30,3 +30,13 @@ export function formatDocument(doc: string): string {
   if (clean.length === 11) return formatCPF(doc)
   return doc // Return original if neither valid CNPJ nor CPF
 }
+
+// A CNJ case number is stored as 20 bare digits and is unreadable that way. The
+// canonical form is NNNNNNN-DD.AAAA.J.TR.OOOO — the same shape a lawyer, a court
+// and a journalist all write. Anything that is not 20 digits is returned untouched
+// rather than mangled into a shape it is not.
+export function formatCNJ(caseNumber: string): string {
+  const d = (caseNumber ?? "").replace(/\D/g, "")
+  if (d.length !== 20) return caseNumber
+  return `${d.slice(0, 7)}-${d.slice(7, 9)}.${d.slice(9, 13)}.${d.slice(13, 14)}.${d.slice(14, 16)}.${d.slice(16, 20)}`
+}
