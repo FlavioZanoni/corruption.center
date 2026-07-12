@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { BrowseNav } from "@/components/BrowseNav";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { ArrowLeft, Search, Scale } from "lucide-react";
+import { Search, Scale } from "lucide-react";
 import { fetchProceedings } from "@/lib/api/proceedings";
 import { NODE_COLORS } from "@/lib/constants";
 import type { ProceedingListItem } from "@/lib/types";
@@ -143,13 +144,7 @@ export default function ProceedingsBrowsePage() {
               Explore {data?.total.toLocaleString("pt-BR") || "os"} processos judiciais. <span className="block mt-1">Os três estados: <strong>com condenação</strong> (corte decidiu), <strong>sem condenação</strong> (corte não condenou), <strong>não verificado</strong> (DataJud ainda não consultou).</span>
             </p>
           </div>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-mono text-text-muted hover:text-white transition-colors shrink-0"
-          >
-            <ArrowLeft size={13} strokeWidth={1.5} />
-            Voltar ao grafo
-          </Link>
+          <BrowseNav current="/processos" />
         </div>
 
         {/* Controls */}

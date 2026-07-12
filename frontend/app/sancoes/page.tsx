@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { BrowseNav } from "@/components/BrowseNav";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { ArrowLeft, Search, ExternalLink, Ban } from "lucide-react";
+import { Search, ExternalLink, Ban } from "lucide-react";
 import { fetchSanctions, fetchSanctionRegistries } from "@/lib/api/sanctions";
 import { NODE_COLORS } from "@/lib/constants";
 import { formatDocument } from "@/lib/format";
@@ -186,13 +187,7 @@ export default function SanctionsBrowsePage() {
               Explore {data?.total.toLocaleString("pt-BR") || "as"} sanções registradas em bases oficiais: TCU, CEIS, CEAF, CNEP, entre outras.
             </p>
           </div>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-mono text-text-muted hover:text-white transition-colors shrink-0"
-          >
-            <ArrowLeft size={13} strokeWidth={1.5} />
-            Voltar ao grafo
-          </Link>
+          <BrowseNav current="/sancoes" />
         </div>
 
         {/* Controls */}

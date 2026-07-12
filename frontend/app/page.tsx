@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Users, Scale, Ban } from "lucide-react";
 import { SearchBar } from "@/components/SearchBar";
 import { FilterPanel } from "@/components/FilterPanel";
 import { TimelineScrubber } from "@/components/TimelineScrubber";
@@ -26,13 +26,32 @@ export default function Home() {
         </div>
       )}
 
-      <Link
-        href="/politicos"
-        className="absolute top-16 left-4 z-30 inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface/90 backdrop-blur border border-border rounded-sm text-[11px] font-mono uppercase tracking-wider text-text-muted hover:text-white hover:border-[#c8a96e]/60 transition-colors"
-      >
-        <Users size={13} strokeWidth={1.5} />
-        Explorar políticos
-      </Link>
+      {/* The graph opens on 3 scandals. Everything else we hold -- 6.5k court cases,
+          65k sanctions, 4.9k politicians -- was reachable only by expanding a
+          scandal node, i.e. not reachable. These are the doors to the rest. */}
+      <nav className="absolute top-16 left-4 z-30 flex flex-wrap gap-2">
+        <Link
+          href="/politicos"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface/90 backdrop-blur border border-border rounded-sm text-[11px] font-mono uppercase tracking-wider text-text-muted hover:text-white hover:border-[#c8a96e]/60 transition-colors"
+        >
+          <Users size={13} strokeWidth={1.5} />
+          Políticos
+        </Link>
+        <Link
+          href="/processos"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface/90 backdrop-blur border border-border rounded-sm text-[11px] font-mono uppercase tracking-wider text-text-muted hover:text-white hover:border-[#8b7ec8]/60 transition-colors"
+        >
+          <Scale size={13} strokeWidth={1.5} />
+          Processos
+        </Link>
+        <Link
+          href="/sancoes"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface/90 backdrop-blur border border-border rounded-sm text-[11px] font-mono uppercase tracking-wider text-text-muted hover:text-white hover:border-[#d98a4b]/60 transition-colors"
+        >
+          <Ban size={13} strokeWidth={1.5} />
+          Sanções
+        </Link>
+      </nav>
 
       <div className="absolute bottom-16 right-4 z-10 flex flex-col items-end gap-1.5">
         <span className="text-[9px] font-mono text-[#333333] tracking-widest uppercase pointer-events-none select-none">

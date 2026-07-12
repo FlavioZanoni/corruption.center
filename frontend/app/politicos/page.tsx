@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { BrowseNav } from "@/components/BrowseNav";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { ArrowLeft, Search, Ban, Scale, Share2 } from "lucide-react";
+import { Search, Ban, Scale, Share2 } from "lucide-react";
 import { fetchPoliticians } from "@/lib/api/politicians";
 import { NODE_COLORS } from "@/lib/constants";
 import type { PoliticianListItem } from "@/lib/types";
@@ -138,13 +139,7 @@ export default function PoliticiansBrowsePage() {
               Explore os políticos monitorados: mesmo antes de qualquer escândalo mapeado.
             </p>
           </div>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-mono text-text-muted hover:text-white transition-colors shrink-0"
-          >
-            <ArrowLeft size={13} strokeWidth={1.5} />
-            Voltar ao grafo
-          </Link>
+          <BrowseNav current="/politicos" />
         </div>
 
         {/* Controls */}
