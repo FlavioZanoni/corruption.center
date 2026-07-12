@@ -194,6 +194,35 @@ func (w *Worker) runRematchMode(ctx context.Context, opts Options, index map[str
 
 // ─── Case mode ────────────────────────────────────────────────────────────────
 
+// progressEvery is how often a long mode says where it is. A DJEN run takes
+// hours, and the worker used to print its stats only at exit: the only way to
+// tell a run that was working from one that was wedged was to watch the database
+// move and hope. A line every 100 items costs nothing and answers "is it alive,
+// and how long is left".
+const progressEvery = 100
+
+func (w *Worker) progress(mode string, done, total int, start time.Time) {
+	if done%progressEvery != 0 && done != total {
+		return
+	}
+	elapsed := time.Since(start)
+	w.log.Info("djen: progress",
+		"mode", mode,
+		"done", done,
+		"total", total,
+		"elapsed", elapsed.Round(time.Second),
+		"eta", etaFor(done, total, elapsed).Round(time.Second))
+}
+
+// etaFor extrapolates the time left from the rate so far. Zero when there is
+// nothing to go on (or nothing left), rather than a made-up number.
+func etaFor(done, total int, elapsed time.Duration) time.Duration {
+	if done <= 0 || total <= done {
+		return 0
+	}
+	return time.Duration(float64(elapsed) / float64(done) * float64(total-done))
+}
+
 func (w *Worker) runCaseMode(ctx context.Context, opts Options, index map[string]string, stats *RunStats) error {
 	// DJEN uses its own poll cursor (djen_last_polled_at), independent of the
 	// DataJud watcher's last_polled_at, so concluded cases are not starved.
@@ -208,8 +237,10 @@ func (w *Worker) runCaseMode(ctx context.Context, opts Options, index map[string
 		limit = len(cases)
 	}
 
+	start := time.Now()
 	for i := 0; i < limit; i++ {
 		c := cases[i]
+		w.progress("case", i+1, limit, start)
 
 		// Case numbers seeded via the backoffice may be in formatted CNJ form
 		// ("5046512-94.2016.4.04.7000"); the DJEN API needs 20 bare digits.
@@ -407,6 +438,14 @@ func (w *Worker) runNameMode(ctx context.Context, opts Options, pols []memgraph.
 		cap = defaultNameCap
 	}
 
+	// Counted up front so progress has a denominator: a politician may contribute
+	// more than one search name.
+	totalNames := 0
+	for _, p := range pols {
+		totalNames += len(searchNamesFor(p))
+	}
+	start := time.Now()
+
 	// Only the fetches are concurrent. Every database write, and every counter,
 	// stays on this goroutine — so there is no lock to get wrong and no way for two
 	// politicians to race each other into the same case.
@@ -450,6 +489,7 @@ func (w *Worker) runNameMode(ctx context.Context, opts Options, pols []memgraph.
 		name := lookup.name
 		stats.PoliticiansScanned++
 		stats.NamesSearched++
+		w.progress("name", stats.NamesSearched, totalNames, start)
 
 		if lookup.err != nil {
 			if ctx.Err() != nil {

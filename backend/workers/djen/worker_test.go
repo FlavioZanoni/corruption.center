@@ -3,6 +3,7 @@ package djen
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"corruption-center/db/memgraph"
 )
@@ -348,5 +349,27 @@ func TestSearchNamesFor_SearchesLegalNameOnlyNotAliases(t *testing.T) {
 	// print is free; only searching for one is not.
 	if id, ok := matchPolitician("LULA", buildPoliticianIndex([]memgraph.PoliticianNames{pol})); !ok || id != "pol_1" {
 		t.Fatal("aliases must remain matchable in the politician index")
+	}
+}
+
+func TestEtaFor(t *testing.T) {
+	// Half done in 10 minutes → about 10 minutes left.
+	if got := etaFor(50, 100, 10*time.Minute); got != 10*time.Minute {
+		t.Fatalf("want 10m, got %v", got)
+	}
+	// A quarter done in 1 hour → three quarters left.
+	if got := etaFor(25, 100, time.Hour); got != 3*time.Hour {
+		t.Fatalf("want 3h, got %v", got)
+	}
+	// Nothing to extrapolate from: report nothing, do not divide by zero.
+	if got := etaFor(0, 100, time.Minute); got != 0 {
+		t.Fatalf("want 0 with no samples, got %v", got)
+	}
+	// Finished (or overshot): no time left, never a negative ETA.
+	if got := etaFor(100, 100, time.Hour); got != 0 {
+		t.Fatalf("want 0 when done, got %v", got)
+	}
+	if got := etaFor(120, 100, time.Hour); got != 0 {
+		t.Fatalf("want 0 when overshot, got %v", got)
 	}
 }
