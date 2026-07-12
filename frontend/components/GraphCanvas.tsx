@@ -201,9 +201,12 @@ interface SimLink extends d3.SimulationLinkDatum<SimNode> {
 // Clicking further nodes accumulates - the visible set grows until collapse.
 
 class ExpandState {
-  private visibleIds: Set<string> = new Set();
   private allNodes: Map<string, SimNode> = new Map();
   private adjacency: Map<string, Set<string>> = new Map();
+  // The nodes the user has opened. Visibility is DERIVED from this, never edited
+  // directly - see recompute().
+  private expandedIds: Set<string> = new Set();
+  private visibleIds: Set<string> = new Set();
 
   init(nodes: SimNode[], links: SimLink[]) {
     this.allNodes = new Map(nodes.map((n) => [n.id, n]));
@@ -223,39 +226,44 @@ class ExpandState {
       this.adjacency.get(tgtId)?.add(srcId);
     }
 
-    this.visibleIds = new Set(
-      nodes.filter((n) => n.type === "scandal").map((n) => n.id),
-    );
+    this.expandedIds = new Set();
+    this.recompute();
+  }
+
+  // A node is on screen if it is a scandal (the always-visible roots), if the
+  // user opened it, or if something the user opened points at it.
+  //
+  // Deriving this is the whole point. The old version mutated the visible set
+  // directly, and collapsing removed the clicked node's NEIGHBOURS - which for a
+  // person means removing the legal proceeding they hang off. The sibling
+  // defendants stayed on screen, but an edge only draws when both endpoints are
+  // visible, so every one of them was left floating with no connection. Clicking
+  // a person deleted the very node that connected all the other people.
+  private recompute(): void {
+    const visible = new Set<string>();
+    for (const n of this.allNodes.values()) {
+      if (n.type === "scandal") visible.add(n.id);
+    }
+    for (const id of this.expandedIds) {
+      visible.add(id);
+      for (const n of this.adjacency.get(id) ?? []) visible.add(n);
+    }
+    this.visibleIds = visible;
   }
 
   // Returns whether this node's neighbourhood was expanded (true) or collapsed (false)
   toggle(nodeId: string): { ids: Set<string>; expanded: boolean } {
-    const neighbours = this.adjacency.get(nodeId) ?? new Set<string>();
-    const alreadyExpanded = [...neighbours].every((n) =>
-      this.visibleIds.has(n),
-    );
+    const expanded = !this.expandedIds.has(nodeId);
+    if (expanded) this.expandedIds.add(nodeId);
+    else this.expandedIds.delete(nodeId);
 
-    if (alreadyExpanded && this.visibleIds.has(nodeId)) {
-      // collapse: remove neighbours that aren't scandals and aren't shared with other visible scandals
-      for (const n of neighbours) {
-        const node = this.allNodes.get(n);
-        if (node?.type !== "scandal") this.visibleIds.delete(n);
-      }
-      return { ids: new Set(this.visibleIds), expanded: false };
-    } else {
-      // expand
-      this.visibleIds.add(nodeId);
-      for (const n of neighbours) this.visibleIds.add(n);
-      return { ids: new Set(this.visibleIds), expanded: true };
-    }
+    this.recompute();
+    return { ids: new Set(this.visibleIds), expanded };
   }
 
   collapse(): Set<string> {
-    this.visibleIds = new Set(
-      Array.from(this.allNodes.values())
-        .filter((n) => n.type === "scandal")
-        .map((n) => n.id),
-    );
+    this.expandedIds.clear();
+    this.recompute();
     return new Set(this.visibleIds);
   }
 
