@@ -17,6 +17,10 @@ const LEGEND_ENTRIES = [
   { kind: "node", color: "#6dbf8f", label: "Pessoa" },
   { kind: "node", color: "#c8a96e", label: "Político" },
   { kind: "node", color: "#5b9bd5", label: "Organização" },
+  { kind: "node", color: "#d98a4b", label: "Sanção" },
+  // The ring says the CASE ended in a conviction. It never says which defendant
+  // was convicted, because no official source we use publishes that.
+  { kind: "ring", color: "#cc2222", label: "Processo com condenação" },
   // edge types, all of which the graph really contains
   {
     kind: "edge",
@@ -29,6 +33,12 @@ const LEGEND_ENTRIES = [
     color: "#998822",
     width: 1.0,
     label: "Citado (réu no processo)",
+  },
+  {
+    kind: "edge",
+    color: "#d98a4b",
+    width: 1.0,
+    label: "Sancionado (CGU/TCU)",
   },
 ] as const;
 
@@ -56,6 +66,18 @@ export function GraphLegend() {
               {e.kind === "node" ? (
                 <svg width="14" height="14" viewBox="0 0 14 14" className="shrink-0">
                   <circle cx="7" cy="7" r="5" fill={e.color} />
+                </svg>
+              ) : e.kind === "ring" ? (
+                <svg width="14" height="14" viewBox="0 0 14 14" className="shrink-0">
+                  <circle cx="7" cy="7" r="3.5" fill="#8b7ec8" />
+                  <circle
+                    cx="7"
+                    cy="7"
+                    r="6"
+                    fill="none"
+                    stroke={e.color}
+                    strokeWidth="1.5"
+                  />
                 </svg>
               ) : (
                 <svg width="14" height="14" viewBox="0 0 22 10" className="shrink-0">

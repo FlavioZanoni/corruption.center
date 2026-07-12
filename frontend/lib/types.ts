@@ -158,17 +158,22 @@ export interface TimelineResponse extends GraphResponse {
 
 // ─── Filter state types (used in store) ──────────────────────────────────────
 
-// Only the node types the graph can actually draw. The canvas is fed by the
-// timeline, which returns scandals, their cases, and the parties to those cases -
-// so a `source` toggle filtered a node type that does not exist anywhere in the
-// database, and a `sanction` toggle filtered a type the timeline never returns.
-// Both hid nothing, whatever you clicked.
+// Only the node types the graph can actually draw. A `source` toggle used to sit
+// here filtering a node type that exists nowhere in the database - it hid nothing,
+// whatever you clicked.
+//
+// `sanction` is real: the timeline now returns the sanctions hanging off a party
+// to a case. None are drawn yet, because no sanctioned entity is a party to a case
+// - the scandal side knows people by name (DJEN) and the sanction side knows them
+// by CPF, and a name is never enough to link them. They appear as soon as a
+// politician party-match is approved, which is the node where the two meet.
 export interface NodeTypeFilters {
   politician: boolean
   person: boolean
   scandal: boolean
   organization: boolean
   legal_proceeding: boolean
+  sanction: boolean
 }
 
 // EdgeStatusFilters and ReliabilityFilters are gone.

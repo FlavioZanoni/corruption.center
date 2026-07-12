@@ -16,6 +16,7 @@ const defaultNodeTypeFilters: NodeTypeFilters = {
   scandal: true,
   organization: true,
   legal_proceeding: true,
+  sanction: true,
 }
 
 const defaultFilters: ActiveFilters = {

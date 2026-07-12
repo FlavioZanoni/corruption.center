@@ -148,6 +148,12 @@ export function FilterPanel() {
               onChange={(v) => setNodeTypeFilter("legal_proceeding", v)}
               color={NODE_COLORS.legal_proceeding}
             />
+            <Toggle
+              label="Sanção"
+              checked={filters.nodeTypes.sanction}
+              onChange={(v) => setNodeTypeFilter("sanction", v)}
+              color={NODE_COLORS.sanction}
+            />
           </Section>
         </div>
 

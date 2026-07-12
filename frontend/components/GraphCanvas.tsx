@@ -494,6 +494,27 @@ export function GraphCanvas() {
       .attr("stroke", (d) => d.color)
       .attr("stroke-width", 1.5);
 
+    // Conviction ring. It marks the CASE, and deliberately never a person.
+    //
+    // A case with ten defendants that ends in a conviction says nothing about
+    // which of the ten, and no official source we use publishes the per-defendant
+    // outcome: DataJud gives case-level movements, DJEN gives names with no
+    // outcome at all. "This case ended in a conviction" is true and defensible.
+    // "This person was convicted" would be an accusation we cannot source — so
+    // the ring goes on the proceeding, and the reader draws their own line.
+    //
+    // has_conviction is not latched: an acquittal on appeal clears it (see
+    // deriveCaseState), so the ring disappears if the conviction is overturned.
+    nodeSel
+      .filter((d) => d.properties?.has_conviction === true)
+      .append("circle")
+      .attr("class", "node-conviction")
+      .attr("r", (d) => d.radius + 3.5)
+      .attr("fill", "none")
+      .attr("stroke", "#cc2222")
+      .attr("stroke-width", 2)
+      .attr("stroke-opacity", 0.9);
+
     // photo or icon
     nodeSel
       .append("image")

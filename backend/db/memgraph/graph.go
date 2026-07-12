@@ -101,6 +101,27 @@ func (db *DB) QueryTimeline(ctx context.Context, from time.Time, to time.Time) (
 	// so the canvas received scandals with no edges at all and clicking one
 	// revealed nothing, while the detail panel (which queries the scandal directly
 	// and does walk the cases) happily listed the connections it could not draw.
+	// The sanctions are returned too, hanging off whoever is a party to a case.
+	//
+	// Today that draws nothing, and the reason is the single most important fact
+	// about this graph: it is two disconnected islands. The scandal side reaches
+	// people through DJEN, which publishes NAMES AND NEVER A DOCUMENT. The sanction
+	// side (52k edges, CEIS/CNEP/CEAF/TCU) reaches them through CPF and CNPJ. By the
+	// matching policy — a document identifies, a name only leads — a name scores at
+	// most 0.35 and is never auto-linked, so a DJEN defendant is never the same node
+	// as a sanctioned person, and the punished entities are not the ones in the
+	// scandals.
+	//
+	// The bridge is the Politician: TSE gives them a CPF, so the sanctions worker
+	// can match them by document (281 already have sanctions), and DJEN can match
+	// them by exact name — which files a review rather than an edge, because a name
+	// is only a lead. Approving one of those reviews creates the Politician's
+	// DEFENDANT_IN edge, and the two islands fuse at that node: the same politician
+	// then carries their prosecution AND their punishments.
+	//
+	// So this clause is not dead weight, it is the payoff being wired up in advance:
+	// the sanctions appear the moment the first party match is approved, with no
+	// further change here.
 	result, err := session.Run(ctx, `
     MATCH (s:Scandal)
     WHERE s.date_start <= $to AND (s.date_end IS NULL OR s.date_end >= $from)
@@ -109,10 +130,9 @@ func (db *DB) QueryTimeline(ctx context.Context, from time.Time, to time.Time) (
     OPTIONAL MATCH (person:Person)-[pr:INVOLVED_IN]->(s)
     OPTIONAL MATCH (o:Organization)-[ri:IMPLICATED_IN]->(s)
     OPTIONAL MATCH (lp:LegalProceeding)-[inv:INVESTIGATES]->(s)
-    OPTIONAL MATCH (p2:Politician)-[d1:DEFENDANT_IN]->(lp)
-    OPTIONAL MATCH (person2:Person)-[d2:DEFENDANT_IN]->(lp)
-    OPTIONAL MATCH (o2:Organization)-[d3:DEFENDANT_IN]->(lp)
-    RETURN s, p, r, person, pr, o, ri, lp, inv, p2, d1, person2, d2, o2, d3
+    OPTIONAL MATCH (party)-[d:DEFENDANT_IN]->(lp)
+    OPTIONAL MATCH (party)-[sanc:SANCTIONED_IN]->(san:Sanction)
+    RETURN s, p, r, person, pr, o, ri, lp, inv, party, d, sanc, san
   `, map[string]any{
 		"from": from.Format("2006-01-02"),
 		"to":   to.Format("2006-01-02"),
