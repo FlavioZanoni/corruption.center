@@ -8,6 +8,16 @@ import (
 )
 
 type Repository interface {
+	// per-defendant judicial outcomes (backoffice, human-entered only)
+	ListProceedingsForOutcome(ctx context.Context) ([]ProceedingSummary, error)
+	ListDefendants(ctx context.Context, proceedingID string) ([]Defendant, error)
+	SetDefendantOutcome(ctx context.Context, proceedingID, partyID, outcome, evidenceURL, actor string) error
+
+	// AttachOrganizationCNPJ resolves an unknown_cnpj review: it gives a name-only
+	// DJEN company the document it never carried, merging it into the sanctioned
+	// node if one already holds that CNPJ.
+	AttachOrganizationCNPJ(ctx context.Context, srcID, cnpj, actor string) (string, error)
+
 	// graph traversal
 	QueryScandalGraph(ctx context.Context, id string) (*models.GraphResponse, error)
 	QueryPoliticianGraph(ctx context.Context, id string) (*models.GraphResponse, error)

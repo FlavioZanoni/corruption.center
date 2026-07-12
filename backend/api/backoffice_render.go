@@ -75,6 +75,7 @@ func renderPage(c *gin.Context, title string, body templ.Component) {
           <a href="/backoffice" class="hover:text-cyan-300">Home</a>
           <a href="/backoffice/seed" class="hover:text-cyan-300">Seed DataJud</a>
           <a href="/backoffice/reviews" class="hover:text-cyan-300">Pending Reviews</a>
+          <a href="/backoffice/outcomes" class="hover:text-cyan-300">Case Outcomes</a>
           <a href="/backoffice/removals" class="hover:text-cyan-300">Removals</a>
           <a href="/backoffice/logs" class="hover:text-cyan-300">Worker Logs &amp; Audit</a>
         </nav>
@@ -106,6 +107,10 @@ func dashboardPage(counts []reviewTypeCountView, total int) templ.Component {
   <a href="/backoffice/reviews" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow">
     <h2 class="font-semibold">Pending reviews</h2>
     <p class="mt-2 text-sm text-slate-600">Approve or reject worker-flagged records.</p>
+  </a>
+  <a href="/backoffice/outcomes" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow">
+    <h2 class="font-semibold">Case outcomes</h2>
+    <p class="mt-2 text-sm text-slate-600">Record who a court actually convicted. Never inferred.</p>
   </a>
   <a href="/backoffice/removals" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow">
     <h2 class="font-semibold">Removal requests</h2>
@@ -278,6 +283,14 @@ func reviewsPage(status, typ string, items []pendingReviewView, scandals []memgr
 				// Use a dropdown of real Scandal nodes plus a new-id fallback.
 				approveForm = `<form method="post" action="/backoffice/reviews/` + id + `/approve" hx-post="/backoffice/reviews/` + id + `/approve" hx-target="body" hx-swap="outerHTML" class="flex flex-col gap-1">
         ` + scandalSelector(scandals, "", "compact") + `
+        <button type="submit" class="rounded bg-emerald-600 px-2 py-1 text-xs text-white">Approve</button>
+      </form>`
+			}
+			if item.IsUnknownCNPJ {
+				// The document DJEN never gives us IS the review. Approving without
+				// typing it is refused server-side; the field is how it gets typed.
+				approveForm = `<form method="post" action="/backoffice/reviews/` + id + `/approve" hx-post="/backoffice/reviews/` + id + `/approve" hx-target="body" hx-swap="outerHTML" class="flex flex-col gap-1">
+        <input name="cnpj" placeholder="CNPJ da empresa" class="w-44 rounded border border-slate-300 px-2 py-1 text-xs" />
         <button type="submit" class="rounded bg-emerald-600 px-2 py-1 text-xs text-white">Approve</button>
       </form>`
 			}

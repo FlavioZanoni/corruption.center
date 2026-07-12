@@ -363,11 +363,14 @@ func (w *Worker) handleCompanyParty(ctx context.Context, opts Options, c psql.Wa
 	if err := w.mg.EnsureDjenDefendantEdge(ctx, "Organization", orgID, c.ProceedingID, "cited"); err != nil {
 		return err
 	}
+	// organization_id is what makes the review actionable: without it the operator
+	// has a company name and a CNPJ and no node to join them on.
 	payload, _ := json.Marshal(map[string]any{
-		"name":        name,
-		"case_number": caseNumber,
-		"source":      "djen",
-		"link":        party.Link,
+		"name":            name,
+		"organization_id": orgID,
+		"case_number":     caseNumber,
+		"source":          "djen",
+		"link":            party.Link,
 	})
 	if err := w.pg.CreatePendingReview(ctx, "unknown_cnpj", payload, workerName); err != nil {
 		return err

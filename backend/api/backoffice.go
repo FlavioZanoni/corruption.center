@@ -33,6 +33,8 @@ const (
 	reviewTypePoliticianInQSA = "possible_politician_in_qsa"
 	// reviewTypePoliticianSanction → SANCTIONED_IN (Politician → Sanction).
 	reviewTypePoliticianSanction = "possible_politician_sanction"
+	// reviewTypeUnknownCNPJ: workers/djen, a company party with no document.
+	reviewTypeUnknownCNPJ = "unknown_cnpj"
 )
 
 // nonDigit strips CNJ formatting so a case number collapses to bare digits.
@@ -126,6 +128,7 @@ type pendingReviewView struct {
 	CreatedAt       string
 	Payload         string
 	IsDJENCandidate bool
+	IsUnknownCNPJ   bool
 }
 
 // removalRequestView is a removal_request row plus the live provenance of the
@@ -179,6 +182,9 @@ func (s *ApiServer) registerBackoffice(r *gin.Engine) {
 		back.GET("/removals", h.removalsList)
 		back.POST("/removals", h.removalCreate)
 		back.POST("/removals/:id/resolve", h.removalResolve)
+		back.GET("/outcomes", h.outcomesList)
+		back.GET("/outcomes/:id", h.outcomeCase)
+		back.POST("/outcomes/:id", h.outcomeSubmit)
 		back.GET("/logs", h.logs)
 	}
 }
@@ -287,6 +293,7 @@ func (h *backofficeHandler) renderReviews(c *gin.Context, errMsg string) {
 			CreatedAt:       it.CreatedAt.UTC().Format("2006-01-02 15:04:05"),
 			Payload:         it.Payload,
 			IsDJENCandidate: it.Type == reviewTypeDJENCandidate,
+			IsUnknownCNPJ:   it.Type == reviewTypeUnknownCNPJ,
 		})
 	}
 	renderPage(c, "Pending reviews", reviewsPage(status, typ, views, h.loadScandals(c.Request.Context()), errMsg))
@@ -312,9 +319,50 @@ func (h *backofficeHandler) reviewApprove(c *gin.Context) {
 		h.approvePoliticianInQSA(c, item)
 	case reviewTypePoliticianSanction:
 		h.approvePoliticianSanction(c, item)
+	case reviewTypeUnknownCNPJ:
+		h.approveUnknownCNPJ(c, item)
 	default:
 		h.updateReview(c, "approved")
 	}
+}
+
+// approveUnknownCNPJ attaches the operator-typed CNPJ to the name-only
+// Organization the DJEN worker created, merging it into the sanctioned node if one
+// already holds that CNPJ. Before this existed, approving an unknown_cnpj review
+// fell through to the default branch: the review went green and NOTHING was
+// written, so the queue emptied itself while the graph learned nothing.
+func (h *backofficeHandler) approveUnknownCNPJ(c *gin.Context, item psql.PendingReviewItem) {
+	var p struct {
+		OrganizationID string `json:"organization_id"`
+		Name           string `json:"name"`
+	}
+	if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
+		h.renderReviews(c, "failed to parse review payload: "+err.Error())
+		return
+	}
+	orgID := strings.TrimSpace(p.OrganizationID)
+	if orgID == "" {
+		h.renderReviews(c, "review payload is missing organization_id (it predates the fix that adds it); reject it and let DJEN re-queue the company")
+		return
+	}
+	cnpj := strings.TrimSpace(c.PostForm("cnpj"))
+	if cnpj == "" {
+		h.renderReviews(c, "approving an unknown_cnpj review requires a cnpj: type the company's CNPJ in the field before approving")
+		return
+	}
+
+	survivorID, err := h.server.memgraph.AttachOrganizationCNPJ(c.Request.Context(), orgID, cnpj, currentUser(c))
+	if err != nil {
+		h.renderReviews(c, "failed to attach CNPJ: "+err.Error())
+		return
+	}
+	h.finishEdgeApproval(c, item, "Organization.cnpj", map[string]any{
+		"organization_id": orgID,
+		"survivor_id":     survivorID,
+		"merged":          survivorID != orgID,
+		"cnpj":            cnpj,
+		"name":            strings.TrimSpace(p.Name),
+	})
 }
 
 // finishEdgeApproval marks the review approved and audits the confirmed edge
