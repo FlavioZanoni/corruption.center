@@ -17,7 +17,12 @@ const (
 	defaultBaseURL = "https://comunicaapi.pje.jus.br/api/v1/comunicacao"
 	userAgent      = "corruption.center-djen/1.0 (contato@corruption.center)"
 
-	itemsPerPage    = 100
+	// DJEN 500s on large pages. The ceiling is fuzzy (65 answers, 70 does not),
+	// so it reads like a response-size limit rather than a declared cap, and it
+	// is nowhere in their docs. We asked for 100 and got a 500 on every single
+	// lookup: a full run made 47 requests over two hours and matched nothing.
+	// 50 answers reliably; leave the headroom.
+	itemsPerPage    = 50
 	maxRetries      = 6
 	backoffInitial  = 1 * time.Second
 	backoffMax      = 60 * time.Second

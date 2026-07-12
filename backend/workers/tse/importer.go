@@ -432,9 +432,16 @@ func cell(row []string, idx map[string]int, key string) string {
 	return row[i]
 }
 
+// normalizeNull maps TSE's "no value" markers to the empty string.
+//
+// TSE writes these both bare and hash-wrapped (#NULO and #NULO#), and the two
+// forms are mixed across columns and years. Listing them one by one missed the
+// wrapped form, so NM_SOCIAL_CANDIDATO handed "#NULO#" to 2,397 politicians as
+// a name alias, a name half the base then shared. No real name starts with '#',
+// so treat the prefix itself as the marker and stop enumerating spellings.
 func normalizeNull(v string) string {
 	v = strings.TrimSpace(v)
-	if v == "" || v == "#NULO" || v == "#NE" || v == "-1" || v == "-3" {
+	if v == "" || strings.HasPrefix(v, "#") || v == "-1" || v == "-3" {
 		return ""
 	}
 	return v

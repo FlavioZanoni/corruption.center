@@ -18,8 +18,12 @@ func TestNormalizeNull(t *testing.T) {
 		"  #NULO  ":       "",
 		"12345678900":     "12345678900",
 		"  12345678900  ": "12345678900",
-		"#NULOX":          "#NULOX", // only the exact sentinels are nulled
 		"-13":             "-13",
+		// TSE writes the markers hash-wrapped too. NM_SOCIAL_CANDIDATO is "#NULO#"
+		// for every candidate without a social name; taking it literally gave half
+		// the politician base the same alias.
+		"#NULO#": "",
+		"#NE#":   "",
 	}
 	for in, want := range cases {
 		if got := normalizeNull(in); got != want {

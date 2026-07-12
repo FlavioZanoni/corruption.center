@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -176,5 +177,33 @@ func TestStripTags(t *testing.T) {
 func TestSnippet_Empty(t *testing.T) {
 	if got := snippet("", 10); got != "" {
 		t.Fatalf("snippet empty = %q", got)
+	}
+}
+
+// DJEN 500s on large pages, with no documented cap and no error body saying so.
+// Asking for 100 made every lookup in a full run fail, which looked like the API
+// being down rather than us sending a bad request. Pin the page size to a value
+// the API actually answers.
+func TestFetchPage_RequestsAPageSizeDJENAccepts(t *testing.T) {
+	const djenObservedCeiling = 65 // 65 answers, 70 does not
+
+	if itemsPerPage > djenObservedCeiling {
+		t.Fatalf("itemsPerPage = %d, above the %d DJEN answers: every lookup will 500",
+			itemsPerPage, djenObservedCeiling)
+	}
+
+	var got string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query().Get("itensPorPagina")
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	defer server.Close()
+
+	c := newTestClient(server.URL)
+	if _, err := c.fetchPage(context.Background(), "nomeParte", "FULANO", 1); err != nil {
+		t.Fatalf("fetchPage: %v", err)
+	}
+	if got != strconv.Itoa(itemsPerPage) {
+		t.Fatalf("sent itensPorPagina=%q, want %d", got, itemsPerPage)
 	}
 }
