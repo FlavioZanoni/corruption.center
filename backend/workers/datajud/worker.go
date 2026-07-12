@@ -3,6 +3,7 @@ package datajud
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,6 +40,10 @@ type RunStats struct {
 	ProbeFieldsOK     bool
 	TPUVerificationOK bool
 	VerificationNotes []string
+	// FetchErrors counts cases abandoned after the client exhausted its retries.
+	// There are ~90 tribunal endpoints and any one can be down; one of them being
+	// unreachable is a fact about that case, not a reason to discard the run.
+	FetchErrors int
 }
 
 func NewWorker(ctx context.Context, pg *psql.DB, mg *memgraph.DB, opts Options) (*Worker, error) {
@@ -107,7 +112,20 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 		c := cases[i]
 		src, err := w.client.SearchByCaseNumber(ctx, c.TribunalEndpoint, c.CaseNumber)
 		if err != nil {
-			return nil, err
+			// One unreachable tribunal used to end the whole run. A pass over 701
+			// cases died on a single timeout against api_publica_tjap and threw away
+			// every case it had already polled — the same failure that cost us a CGU
+			// run and two DJEN runs. There are ~90 tribunal endpoints and any one of
+			// them can be down; that is a fact about one case, not about the run.
+			//
+			// A cancelled context is different: that is us stopping, and it should.
+			if ctx.Err() != nil {
+				return nil, err
+			}
+			stats.FetchErrors++
+			slog.Warn("datajud: case lookup failed, skipping",
+				"case", c.CaseNumber, "endpoint", c.TribunalEndpoint, "err", err)
+			continue
 		}
 		stats.CasesPolled++
 		if src == nil {
