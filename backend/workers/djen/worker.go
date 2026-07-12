@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"corruption-center/db/memgraph"
@@ -378,71 +379,128 @@ func (w *Worker) handleCompanyParty(ctx context.Context, opts Options, c psql.Wa
 
 // ─── Name mode ────────────────────────────────────────────────────────────────
 
+// nameFetchers is how many name lookups are in flight at once.
+//
+// It does NOT raise the request rate: the client's limiter paces every request to
+// the same 60/min budget no matter who asks. It only stops us sitting idle under
+// that budget. A lookup blocks for 2-3s of DJEN latency, so fetching one at a time
+// achieves ~25 req/min against a 60 req/min allowance — and a full name-mode pass
+// is ~29,000 requests (4,882 politicians × 6 yearly windows), which is 8 hours at
+// the budget and 20 at the latency. Four in flight keeps the limiter, not the
+// network, as the thing deciding our pace.
+const nameFetchers = 4
+
+// nameLookup is one politician's DJEN results, carried back to the serial writer.
+type nameLookup struct {
+	pol   memgraph.PoliticianNames
+	name  string
+	items []Item
+	err   error
+}
+
 func (w *Worker) runNameMode(ctx context.Context, opts Options, pols []memgraph.PoliticianNames, stats *RunStats) error {
 	cap := opts.NameCap
 	if cap <= 0 {
 		cap = defaultNameCap
 	}
 
-	for _, pol := range pols {
-		stats.PoliticiansScanned++
-		for _, name := range searchNamesFor(pol) {
-			stats.NamesSearched++
-			items, err := w.client.SearchByPartyName(ctx, name, cap)
-			if err != nil {
-				if ctx.Err() != nil {
-					return err
+	// Only the fetches are concurrent. Every database write, and every counter,
+	// stays on this goroutine — so there is no lock to get wrong and no way for two
+	// politicians to race each other into the same case.
+	lookups := make(chan nameLookup, nameFetchers)
+	go func() {
+		defer close(lookups)
+
+		names := make(chan nameLookup)
+		go func() {
+			defer close(names)
+			for _, pol := range pols {
+				for _, name := range searchNamesFor(pol) {
+					select {
+					case names <- nameLookup{pol: pol, name: name}:
+					case <-ctx.Done():
+						return
+					}
 				}
-				stats.FetchErrors++
-				w.log.Warn("djen: name lookup failed, skipping", "name", name, "err", err)
+			}
+		}()
+
+		var wg sync.WaitGroup
+		for i := 0; i < nameFetchers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for n := range names {
+					n.items, n.err = w.client.SearchByPartyName(ctx, n.name, cap)
+					select {
+					case lookups <- n:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}()
+		}
+		wg.Wait()
+	}()
+
+	for lookup := range lookups {
+		name := lookup.name
+		stats.PoliticiansScanned++
+		stats.NamesSearched++
+
+		if lookup.err != nil {
+			if ctx.Err() != nil {
+				return lookup.err
+			}
+			stats.FetchErrors++
+			w.log.Warn("djen: name lookup failed, skipping", "name", name, "err", lookup.err)
+			continue
+		}
+
+		for caseNumber, group := range groupByProcesso(lookup.items) {
+			// DJEN answers nomeParte as a SUBSTRING match, so most of what comes
+			// back is not the politician at all. Verify before doing anything with
+			// the case.
+			if !groupNamesParty(group, name) {
+				stats.SkippedNotAParty++
 				continue
 			}
 
-			for caseNumber, group := range groupByProcesso(items) {
-				// DJEN answers nomeParte as a SUBSTRING match, so most of what comes
-				// back is not the politician at all. Verify before doing anything
-				// with the case.
-				if !groupNamesParty(group, name) {
-					stats.SkippedNotAParty++
-					continue
-				}
+			// watcher_tracking.case_number and candidate payloads may be stored in
+			// formatted CNJ form; both the dedup queries and this param are
+			// normalized to digits-only so the comparison actually matches.
+			caseDigits := normalizeCaseNumber(caseNumber)
+			tracked, err := w.pg.IsCaseTracked(ctx, caseDigits)
+			if err != nil {
+				return err
+			}
+			if tracked {
+				stats.SkippedTracked++
+				continue
+			}
+			if !groupHasAllowedClass(group) {
+				stats.SkippedClass++
+				continue
+			}
 
-				// watcher_tracking.case_number and candidate payloads may be stored
-				// in formatted CNJ form; both the dedup queries and this param are
-				// normalized to digits-only so the comparison actually matches.
-				caseDigits := normalizeCaseNumber(caseNumber)
-				tracked, err := w.pg.IsCaseTracked(ctx, caseDigits)
+			if !opts.DryRun {
+				// Registering a case asserts nothing about any person: it creates the
+				// LegalProceeding and starts polling it. The claim "this politician is
+				// a defendant" is a separate, name-only inference and still goes to
+				// review (case mode / rematch). So no human is needed here — the
+				// discovery is the case, and its provenance (DJEN publication) is
+				// recorded on the case.
+				registered, err := w.registerDiscoveredCase(ctx, caseDigits, group)
 				if err != nil {
 					return err
 				}
-				if tracked {
-					stats.SkippedTracked++
-					continue
+				if registered {
+					stats.CasesRegistered++
+				} else {
+					stats.SkippedUnregistrable++
 				}
-				if !groupHasAllowedClass(group) {
-					stats.SkippedClass++
-					continue
-				}
-
-				if !opts.DryRun {
-					// Registering a case asserts nothing about any person: it
-					// creates the LegalProceeding and starts polling it. The claim
-					// "this politician is a defendant" is a separate, name-only
-					// inference and still goes to review (case mode / rematch).
-					// So no human is needed here - the discovery is the case, and
-					// its provenance (DJEN publication) is recorded on the case.
-					registered, err := w.registerDiscoveredCase(ctx, caseDigits, group)
-					if err != nil {
-						return err
-					}
-					if registered {
-						stats.CasesRegistered++
-					} else {
-						stats.SkippedUnregistrable++
-					}
-				}
-				stats.CandidatesFlagged++
 			}
+			stats.CandidatesFlagged++
 		}
 	}
 	return nil
