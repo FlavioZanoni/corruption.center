@@ -73,7 +73,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const p = detail.politician
   const connections = buildConnections(detail.connections, p.id)
   const ps = partyState(p)
-  const title = `${p.name}${ps ? ` (${ps})` : ""}: processos, sanções e escândalos`
+  const scandals = ofType(connections, "scandal").length
+  const proceedings = ofType(connections, "legal_proceeding").length
+  const sanctions = ofType(connections, "sanction").length
+
+  // Build title based on actual data: only assert what exists
+  let titleSuffix = ""
+  if (proceedings > 0 || sanctions > 0 || scandals > 0) {
+    const items = [
+      proceedings > 0 && "processos",
+      sanctions > 0 && "sanções",
+      scandals > 0 && "escândalos",
+    ].filter(Boolean)
+    titleSuffix = `: ${items.join(", ")}`
+  }
+  const title = `${p.name}${ps ? ` (${ps})` : ""}${titleSuffix || " — perfil"}`
   const description = summarize(p, connections)
   const url = siteUrl(`/politico/${p.id}`)
   const image = isAllowedImageUrl(p.photo_url) ? p.photo_url : undefined

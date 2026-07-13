@@ -19,6 +19,7 @@ import {
   NODE_TYPE_LABELS,
   formatDate,
   valueLabel,
+  outcomeLabel,
 } from "@/lib/entity-labels"
 
 // ─── Structured data ──────────────────────────────────────────────────────────
@@ -348,9 +349,13 @@ export function ProceedingCard({ connection }: { connection: Connection }) {
       <Field label="Situação" value={status ? valueLabel(status) : undefined} />
       <Field label="Fase" value={phase ? valueLabel(phase) : undefined} />
       <Field label="Resultado" value={outcome ? valueLabel(outcome) : undefined} />
-      {via && (
+      {via && edge && (
         <Field
-          label={EDGE_TYPE_LABELS[edge?.type ?? ""] ?? "Vínculo"}
+          label={
+            edge.type === "DEFENDANT_IN"
+              ? outcomeLabel(edge.properties?.outcome as string | undefined)
+              : EDGE_TYPE_LABELS[edge.type] ?? "Vínculo"
+          }
           value={via.label}
         />
       )}
@@ -388,7 +393,9 @@ export function ConnectionCard({
 }) {
   const { node, edge, via } = connection
   const edgeLabel = edge
-    ? (EDGE_TYPE_LABELS[edge.type] ?? edge.type.replace(/_/g, " ").toLowerCase())
+    ? edge.type === "DEFENDANT_IN"
+      ? outcomeLabel(edge.properties?.outcome as string | undefined)
+      : (EDGE_TYPE_LABELS[edge.type] ?? edge.type.replace(/_/g, " ").toLowerCase())
     : NODE_TYPE_LABELS[node.type]
   const color = NODE_COLORS[node.type] ?? "#999999"
   const provenanceLink = prop(node, "provenance_link")

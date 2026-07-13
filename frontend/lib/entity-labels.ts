@@ -14,7 +14,7 @@ export const NODE_TYPE_LABELS: Record<string, string> = {
 
 export const EDGE_TYPE_LABELS: Record<string, string> = {
   INVOLVED_IN: "Envolvido em",
-  DEFENDANT_IN: "Réu em",
+  DEFENDANT_IN: "Parte citada em",
   MEMBER_OF: "Membro de",
   CONTROLS: "Controla",
   OWNED_BY: "Pertence a",
@@ -47,6 +47,21 @@ export const VALUE_LABELS: Record<string, string> = {
 
 export function valueLabel(raw: string): string {
   return VALUE_LABELS[raw] ?? raw
+}
+
+// Map edge outcome values to pt-BR relationship labels.
+// Used for DEFENDANT_IN edges to render the correct legal status based on outcome.
+export const OUTCOME_LABELS: Record<string, string> = {
+  cited: "Citado em",
+  convicted: "Condenado em",
+  acquitted: "Absolvido em",
+  dismissed: "Processo extinto",
+  indicted: "Denunciado em",
+}
+
+export function outcomeLabel(outcome: string | undefined): string {
+  if (!outcome) return "Parte citada em"
+  return OUTCOME_LABELS[outcome] ?? "Parte citada em"
 }
 
 // How a link between a person and a case/sanction came to exist. Official

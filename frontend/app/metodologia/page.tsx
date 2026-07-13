@@ -263,9 +263,12 @@ export default function MetodologiaPage() {
           <p>
             Os dados aqui apresentados{" "}
             <strong className="text-text">refletem registros oficiais</strong> e
-            podem conter erros originados na própria fonte. O projeto{" "}
-            <strong className="text-text">não adiciona nem infere informações
-            além do que consta nos registros oficiais</strong>.
+            podem conter erros originados na própria fonte. O projeto faz{" "}
+            <strong className="text-text">algumas inferências</strong> (como
+            associar CPFs mascarados a políticos específicos) e sempre{" "}
+            <strong className="text-text">marca a origem e a confiança</strong>{" "}
+            de cada vínculo, para que você saiba o que é fato oficial e o que é
+            uma conclusão nossa baseada em evidências.
           </p>
           <p>
             A existência de um processo, de uma citação ou de um vínculo

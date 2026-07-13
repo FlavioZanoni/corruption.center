@@ -579,11 +579,11 @@ export function GraphCanvas() {
         // For legal proceedings, add conviction state
         if (d.type === "legal_proceeding") {
           if (d.properties?.has_conviction === true) {
-            tooltip += "\nCondenado";
+            tooltip += "\nProcesso com condenação";
           } else if (d.properties?.has_conviction === false) {
-            tooltip += "\nVerificado (sem condenação)";
+            tooltip += "\nProcesso verificado (sem condenação)";
           } else {
-            tooltip += "\nNão verificado";
+            tooltip += "\nProcesso não verificado";
           }
         }
 

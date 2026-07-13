@@ -124,13 +124,11 @@ function eventJsonLd(
     ...(prop(node, "cnpj") ? { taxID: prop(node, "cnpj") } : {}),
   }))
 
+  // Deliberately NO Person entities in structured data. The HTML page lists names
+  // for transparency, but a schema.org Person entity is a machine-readable
+  // invitation to index private citizens by name. The public record stays readable
+  // in HTML; it does not get amplified by structured data indexing.
   const mentions: Record<string, unknown>[] = [
-    ...politicians.map(({ node }) => ({
-      "@type": "Person",
-      name: node.label,
-      url: siteUrl(`/politico/${node.id}`),
-    })),
-    ...people.map(({ node }) => ({ "@type": "Person", name: node.label })),
     ...proceedings.map(({ node }) => ({
       "@type": "CreativeWork",
       name: `Processo ${prop(node, "case_number") ?? node.label}`,

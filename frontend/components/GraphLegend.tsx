@@ -36,7 +36,7 @@ const LEGEND_ENTRIES = [
     kind: "edge",
     color: "#998822",
     width: 1.0,
-    label: "Citado (réu no processo)",
+    label: "Citado (nome nos autos)",
   },
   {
     kind: "edge",

@@ -19,7 +19,7 @@ import { useAppStore } from "@/lib/store";
 import { fetchExpandGraph } from "@/lib/api/graph";
 import type { GraphNode, GraphEdge } from "@/lib/types";
 import { NODE_COLORS } from "@/lib/constants";
-import { NODE_TYPE_LABELS, EDGE_TYPE_LABELS } from "@/lib/entity-labels";
+import { NODE_TYPE_LABELS, EDGE_TYPE_LABELS, outcomeLabel } from "@/lib/entity-labels";
 import { entityHref as entityPageHref } from "@/components/EntityUI";
 import { ProvenanceBadge, ReviewBadge } from "@/components/ProvenanceBadge";
 import { porExtenso, estilo } from "numero-por-extenso";
@@ -168,7 +168,7 @@ const PROP_VALUES: Record<string, string> = {
   // org type
   party: "Partido político",
   company: "Empresa",
-  shell: "Empresa de fachada",
+  shell: "Possível empresa de fachada (não verificado)",
   ngo: "ONG",
   public_agency: "Estatal / Órgão público",
   // legal proceeding type
@@ -232,7 +232,9 @@ function ConnectedNodeItem({
   onClick: (node: GraphNode) => void;
 }) {
   const edgeLabel =
-    EDGE_TYPE_LABELS[edge.type] ?? edge.type.replace(/_/g, " ").toLowerCase();
+    edge.type === "DEFENDANT_IN"
+      ? outcomeLabel(edge.properties?.outcome as string | undefined)
+      : EDGE_TYPE_LABELS[edge.type] ?? edge.type.replace(/_/g, " ").toLowerCase();
   const statusColor = edgeStatusColor(edge.properties);
 
   const roleAtTime = edge.properties.role_at_time as string | undefined;
