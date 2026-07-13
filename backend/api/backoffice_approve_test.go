@@ -32,7 +32,7 @@ func postApprove(id string, form url.Values) (*gin.Context, *httptest.ResponseRe
 func TestApprove_DJENPartyMatch_CreatesDefendantEdge(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	payload := `{"politician_id":"pol_9","proceeding_id":"lp_7","case_number":"50465129420168040001","polo":"P","tribunal":"TRF4"}`
-	ps := &stubPsql{review: psql.PendingReviewItem{ID: "rev1", Type: reviewTypeDJENPartyMatch, Payload: payload}}
+	ps := &stubPsql{review: psql.PendingReviewItem{ID: "rev1", Type: reviewTypeDJENPartyMatch, Status: "pending", Payload: payload}}
 	mg := &stubMemgraph{}
 	h := &backofficeHandler{server: &ApiServer{psql: ps, memgraph: mg}}
 
@@ -53,7 +53,7 @@ func TestApprove_DJENPartyMatch_CreatesDefendantEdge(t *testing.T) {
 func TestApprove_PoliticianInQSA_CreatesControlsEdge(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	payload := `{"politician_id":"pol_1","organization_id":"org_123","socio_name":"X"}`
-	ps := &stubPsql{review: psql.PendingReviewItem{ID: "rev2", Type: reviewTypePoliticianInQSA, Payload: payload}}
+	ps := &stubPsql{review: psql.PendingReviewItem{ID: "rev2", Type: reviewTypePoliticianInQSA, Status: "pending", Payload: payload}}
 	mg := &stubMemgraph{}
 	h := &backofficeHandler{server: &ApiServer{psql: ps, memgraph: mg}}
 
@@ -72,7 +72,7 @@ func TestApprove_PoliticianInQSA_FormOverridesCandidate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	// Multi-candidate payload: no politician_id; operator disambiguates via form.
 	payload := `{"organization_id":"org_5","candidates":[{"id":"pol_a"},{"id":"pol_b"}]}`
-	ps := &stubPsql{review: psql.PendingReviewItem{ID: "rev3", Type: reviewTypePoliticianInQSA, Payload: payload}}
+	ps := &stubPsql{review: psql.PendingReviewItem{ID: "rev3", Type: reviewTypePoliticianInQSA, Status: "pending", Payload: payload}}
 	mg := &stubMemgraph{}
 	h := &backofficeHandler{server: &ApiServer{psql: ps, memgraph: mg}}
 
@@ -87,7 +87,7 @@ func TestApprove_PoliticianInQSA_FormOverridesCandidate(t *testing.T) {
 func TestApprove_PoliticianSanction_CreatesSanctionedEdge(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	payload := `{"politician_id":"pol_2","sanction_id":"CEIS:42","registry":"CEIS"}`
-	ps := &stubPsql{review: psql.PendingReviewItem{ID: "rev4", Type: reviewTypePoliticianSanction, Payload: payload}}
+	ps := &stubPsql{review: psql.PendingReviewItem{ID: "rev4", Type: reviewTypePoliticianSanction, Status: "pending", Payload: payload}}
 	mg := &stubMemgraph{}
 	h := &backofficeHandler{server: &ApiServer{psql: ps, memgraph: mg}}
 
@@ -118,7 +118,7 @@ func TestApprove_MissingIDs_FailVisibly(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ps := &stubPsql{review: psql.PendingReviewItem{ID: "x", Type: tc.typ, Payload: tc.payload}}
+			ps := &stubPsql{review: psql.PendingReviewItem{ID: "x", Type: tc.typ, Status: "pending", Payload: tc.payload}}
 			mg := &stubMemgraph{}
 			h := &backofficeHandler{server: &ApiServer{psql: ps, memgraph: mg}}
 
@@ -146,7 +146,7 @@ func TestApprove_MissingIDs_FailVisibly(t *testing.T) {
 func TestApprove_EdgeWriteFails_StaysPending(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	payload := `{"politician_id":"pol_9","proceeding_id":"lp_7"}`
-	ps := &stubPsql{review: psql.PendingReviewItem{ID: "rev1", Type: reviewTypeDJENPartyMatch, Payload: payload}}
+	ps := &stubPsql{review: psql.PendingReviewItem{ID: "rev1", Type: reviewTypeDJENPartyMatch, Status: "pending", Payload: payload}}
 	mg := &stubMemgraph{edgeErr: memgraph.ErrNodeNotPurgeable} // any non-nil error
 	h := &backofficeHandler{server: &ApiServer{psql: ps, memgraph: mg}}
 

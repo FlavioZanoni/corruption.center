@@ -176,6 +176,9 @@ true. A guess does not.
 
 	for _, d := range defendants {
 		b.WriteString(`<form method="post" action="/backoffice/outcomes/` + template.HTMLEscapeString(proceedingID) + `"
+   hx-post="/backoffice/outcomes/` + template.HTMLEscapeString(proceedingID) + `"
+   hx-target="body"
+   hx-swap="outerHTML"
    class="mb-3 rounded-lg border border-slate-200 p-4">
 <input type="hidden" name="party_id" value="` + template.HTMLEscapeString(d.PartyID) + `" />
 <div class="mb-2 flex items-center gap-2">

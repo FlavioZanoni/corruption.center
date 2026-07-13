@@ -175,17 +175,23 @@ func (s *ApiServer) registerBackoffice(r *gin.Engine) {
 	{
 		back.GET("", h.dashboard)
 		back.GET("/seed", h.seedForm)
-		back.POST("/seed", h.seedSubmit)
 		back.GET("/reviews", h.reviewsList)
-		back.POST("/reviews/:id/approve", h.reviewApprove)
-		back.POST("/reviews/:id/reject", h.reviewReject)
 		back.GET("/removals", h.removalsList)
-		back.POST("/removals", h.removalCreate)
-		back.POST("/removals/:id/resolve", h.removalResolve)
 		back.GET("/outcomes", h.outcomesList)
 		back.GET("/outcomes/:id", h.outcomeCase)
-		back.POST("/outcomes/:id", h.outcomeSubmit)
 		back.GET("/logs", h.logs)
+	}
+	// State-changing POSTs protected by CSRF middleware that requires HX-Request header.
+	// This blocks cross-site form submissions while allowing all legitimate htmx
+	// backoffice forms (which always send HX-Request: true by design).
+	backPost := r.Group("/backoffice", middleware.BackofficeBasicAuth(), middleware.CSRFProtection())
+	{
+		backPost.POST("/seed", h.seedSubmit)
+		backPost.POST("/reviews/:id/approve", h.reviewApprove)
+		backPost.POST("/reviews/:id/reject", h.reviewReject)
+		backPost.POST("/removals", h.removalCreate)
+		backPost.POST("/removals/:id/resolve", h.removalResolve)
+		backPost.POST("/outcomes/:id", h.outcomeSubmit)
 	}
 }
 
@@ -308,6 +314,15 @@ func (h *backofficeHandler) reviewApprove(c *gin.Context) {
 	item, err := h.server.psql.GetPendingReview(c.Request.Context(), id)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "failed to load review: %v", err)
+		return
+	}
+	// Prevent double-submission: only approve if status is pending. A double-click
+	// or replayed request against an already-approved/rejected review must be
+	// idempotent (the graph MERGE is, but the status transition must guard it).
+	// This mirrors the gate in removalResolve that prevents re-runs against
+	// non-pending removal requests.
+	if item.Status != "pending" {
+		h.renderReviews(c, "approval ignored: review is not pending (already "+item.Status+")")
 		return
 	}
 	switch item.Type {

@@ -72,6 +72,12 @@ func (s *ApiServer) Start(port string) {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// Fail fast if production is using weak/default backoffice credentials.
+	// This prevents silent security misconfigurations like the old ENABLE_WRITES bug.
+	if err := middleware.ValidateBackofficeCredentials(); err != nil {
+		log.Fatal(err)
+	}
+
 	log.Default().Printf("Starting API server on port %s", port)
 	r := s.SetupRouter()
 	r.Run(fmt.Sprintf(":%s", port))

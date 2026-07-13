@@ -103,11 +103,42 @@ func (db *DB) applyMigration(ctx context.Context, filename, content string) erro
 			continue
 		}
 		if _, err := session.Run(ctx, stmt, nil); err != nil {
+			// If a CREATE CONSTRAINT or CREATE INDEX fails with "already exists",
+			// treat it as success (idempotent). This handles mid-migration crashes:
+			// if the process dies after creating an index but before recording the
+			// migration in Postgres, the next boot re-runs the file and would error.
+			// Only allow this for constraint/index DDL, not for other statements
+			// (a real error on any other statement still fails).
+			isAlreadyExists := isAlreadyExistsError(err)
+			isConstraintOrIndex := strings.HasPrefix(strings.TrimSpace(stmt), "CREATE CONSTRAINT") ||
+				strings.HasPrefix(strings.TrimSpace(stmt), "CREATE INDEX")
+
+			if isAlreadyExists && isConstraintOrIndex {
+				db.log.Info("memgraph: constraint/index already exists (idempotent), continuing", "file", filename, "statement_prefix", stmt[:50])
+				continue
+			}
+
 			return fmt.Errorf("memgraph: exec migration %s: %w", filename, err)
 		}
 	}
 
 	return db.psql.RecordMemgraphMigration(ctx, filename)
+}
+
+// isAlreadyExistsError checks if a Memgraph error is an "already exists" error
+// for a constraint or index. These errors can safely be ignored during idempotent
+// re-runs of migrations after a crash.
+func isAlreadyExistsError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	// Memgraph returns various forms of "already exists" errors.
+	// Check for common patterns.
+	return strings.Contains(msg, "already exists") ||
+		strings.Contains(msg, "already present") ||
+		strings.Contains(msg, "Constraint already") ||
+		strings.Contains(msg, "constraint already")
 }
 
 // splitStatements parses a .cypher file into individual executable statements.
