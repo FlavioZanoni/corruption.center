@@ -87,6 +87,7 @@ MERGE (o:Organization {cnpj: $cnpj})
 ON CREATE SET o.id = $id
 SET
   o.name = $name,
+  o.search_name = $search_name,
   o.active = $active,
   o.type = $type,
   o.uf = $uf,
@@ -99,6 +100,7 @@ RETURN o.id AS id
 		"id":                "org_" + digits,
 		"cnpj":              digits,
 		"name":              strings.TrimSpace(e.Name),
+		"search_name":       foldQuery(e.Name),
 		"active":            e.Active,
 		"type":              e.Type,
 		"uf":                strings.ToUpper(strings.TrimSpace(e.UF)),
@@ -147,6 +149,7 @@ MATCH (o:Organization {id: $org_id})
 MERGE (p:Person {id: $id})
 SET
   p.name = $name,
+  p.search_name = $search_name,
   p.provenance_source = 'cnpj',
   p.provenance_masked_cpf = $masked_cpf,
   p.provenance_source_cnpj = $source_cnpj
@@ -157,6 +160,7 @@ RETURN p.id AS id
 		"id":            id,
 		"org_id":        orgID,
 		"name":          strings.TrimSpace(p.Name),
+		"search_name":   foldQuery(p.Name),
 		"masked_cpf":    strings.TrimSpace(p.MaskedCPF),
 		"qualification": p.Qualification,
 		"source_cnpj":   digitsOnly(p.SourceCNPJ),

@@ -48,8 +48,8 @@ func (db *DB) UpsertScandal(ctx context.Context, id, name, dateStart string) err
 	}
 	_, err := session.Run(ctx, `
 MERGE (s:Scandal {id: $id})
-ON CREATE SET s.name = $name, s.date_start = $date_start
-`, map[string]any{"id": id, "name": name, "date_start": dateStart})
+ON CREATE SET s.name = $name, s.search_name = $search_name, s.date_start = $date_start
+`, map[string]any{"id": id, "name": name, "search_name": foldQuery(name), "date_start": dateStart})
 	if err != nil {
 		return fmt.Errorf("memgraph: upsert scandal: %w", err)
 	}
@@ -78,6 +78,7 @@ func (db *DB) UpsertScandalSeed(ctx context.Context, s ScandalSeed) error {
 	_, err := session.Run(ctx, `
 MERGE (s:Scandal {id: $id})
 SET s.name = $name,
+    s.search_name = $search_name,
     s.description = $description,
     s.date_start = $date_start,
     s.date_end = CASE WHEN $date_end = '' THEN NULL ELSE $date_end END,
@@ -87,6 +88,7 @@ SET s.name = $name,
 `, map[string]any{
 		"id":            s.ID,
 		"name":          s.Name,
+		"search_name":   foldQuery(s.Name),
 		"description":   s.Description,
 		"date_start":    s.DateStart,
 		"date_end":      s.DateEnd,

@@ -97,7 +97,7 @@ RETURN o.id AS id
 	if err := run(ctx, session, `
 MATCH (src:Organization {id: $src}), (dst:Organization {id: $dst})
 WHERE dst.name IS NULL OR dst.name = ''
-SET dst.name = src.name
+SET dst.name = src.name, dst.search_name = src.search_name
 `, params); err != nil {
 		return "", err
 	}

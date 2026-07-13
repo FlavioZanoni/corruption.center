@@ -66,6 +66,7 @@ MERGE (s:SanctionRecord {id: $id})
 SET
   s:Sanction,
   s.registry = $registry,
+  s.search_text = $search_text,
   s.sanction_type = $sanction_type,
   s.organ = $organ,
   s.date_start = $date_start,
@@ -79,6 +80,10 @@ RETURN s.id AS id
 `, map[string]any{
 		"id":            id,
 		"registry":      strings.ToUpper(strings.TrimSpace(s.Registry)),
+		// search_text: one folded haystack of the searchable sanction fields, so
+		// /search matches without folding registry/type/organ/process_ref on every
+		// one of 64k+ sanctions at query time (see search.go, migration 005).
+		"search_text": foldQuery(s.Registry + " " + s.SanctionType + " " + s.Organ + " " + s.ProcessRef),
 		"sanction_type": s.SanctionType,
 		"organ":         s.Organ,
 		"date_start":    nilIfEmpty(s.DateStart),
@@ -214,11 +219,11 @@ func (db *DB) UpsertPersonByCPF(ctx context.Context, name, cpf string) (string, 
 	defer session.Close(ctx)
 	res, err := session.Run(ctx, `
 MERGE (p:Person {cpf: $cpf})
-ON CREATE SET p.id = $id, p.name = $name, p._sanctions_created = true
+ON CREATE SET p.id = $id, p.name = $name, p.search_name = $search_name, p._sanctions_created = true
 WITH p, coalesce(p._sanctions_created, false) AS created
 REMOVE p._sanctions_created
 RETURN p.id AS id, created AS created
-`, map[string]any{"id": "person_" + digits, "cpf": digits, "name": strings.TrimSpace(name)})
+`, map[string]any{"id": "person_" + digits, "cpf": digits, "name": strings.TrimSpace(name), "search_name": foldQuery(name)})
 	if err != nil {
 		return "", false, fmt.Errorf("memgraph: upsert person by cpf: %w", err)
 	}

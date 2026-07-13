@@ -45,15 +45,22 @@ var accentFold = [][2]string{
 }
 
 // foldExpr wraps a Cypher string expression so it compares without case or
-// accents. Used on the STORED side of every search comparison.
+// accents at QUERY TIME. It survives only for the low-cardinality secondary
+// search fields that do not grow without bound — aliases, a scandal
+// description, a sanction's registry/organ, a proceeding's class/court. Those
+// are cheap to fold on the fly and change too rarely to be worth a stored
+// column.
 //
-// ponytail: this folds at query time, on every node, every search — no stored
-// column to maintain and so no way for one of the eight writers that set a name
-// to forget it and silently make its entities unfindable. The price is a full
-// scan with ~48 nested replaces, which measures around half a second over the
-// 36k named nodes we have. If the base grows an order of magnitude, the upgrade
-// is a folded `search_name` property written once and indexed — at which point
-// maintaining it across every writer becomes the cost worth paying.
+// The name-bearing labels that DO grow — Person, Politician, Organization,
+// Scandal — no longer fold at query time. The upgrade the earlier version of
+// this comment predicted has happened: every name-writer now stores a folded
+// `search_name` (migration 005_search_name backfilled it), and search.go
+// compares against that. The trigger was the improbidade import: ~48 nested
+// replaces over every node, every search, is a ~300x multiplier that turned an
+// 8s name scan over 130k nodes into a 40s+ scan over 500k. The price is real —
+// every writer that sets a name must set search_name beside it (foldQuery), or
+// that entity goes silently unfindable — but at import scale it is the price
+// worth paying.
 func foldExpr(expr string) string {
 	out := "toLower(" + expr + ")"
 	for _, f := range accentFold {

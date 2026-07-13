@@ -24,9 +24,21 @@ import (
 // separate query rather than widened into this one.
 //
 // $q is ALWAYS the folded query (see foldQuery), and every stored value it is
-// compared against is wrapped in foldExpr. Folding one side and not the other
+// compared against is either the precomputed folded `search_name` (for the
+// name-bearing labels that grow without bound — Person, Politician,
+// Organization, Scandal) or, for the low-cardinality secondary fields that do
+// not, wrapped in foldExpr at query time. Folding one side and not the other
 // matches nothing, and reads as "no results" rather than as a bug, so it is
 // applied here once, at the entry point.
+
+// foldedName is the precomputed, folded name written by every name-writer
+// (see foldQuery and migration 005_search_name). Comparing against it replaces
+// the per-node, query-time fold that made a name search cost O(nodes × ~48
+// string replaces) — an 8s scan for a rare name over ~130k nodes, and the hard
+// blocker on importing the ~500k-row improbidade registry. coalesce guards the
+// transition window: a node written before its writer learned to set
+// search_name simply does not match, rather than erroring the whole query.
+const foldedName = `coalesce(node.search_name, "")`
 func (db *DB) QuerySearch(ctx context.Context, q string, nodeType string) (*models.GraphResponse, error) {
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
@@ -70,7 +82,7 @@ func searchPersonsQuery() string {
     WHERE %s CONTAINS $q
     RETURN node
     LIMIT 20
-  `, foldExpr("node.name"))
+  `, foldedName)
 }
 
 func searchPoliticiansQuery() string {
@@ -80,7 +92,7 @@ func searchPoliticiansQuery() string {
        OR ANY(alias IN coalesce(node.name_aliases, []) WHERE %s CONTAINS $q)
     RETURN node
     LIMIT 20
-  `, foldExpr("node.name"), foldExpr("alias"))
+  `, foldedName, foldExpr("alias"))
 }
 
 func searchScandalsQuery() string {
@@ -91,7 +103,7 @@ func searchScandalsQuery() string {
        OR %s CONTAINS $q
     RETURN node
     LIMIT 20
-  `, foldExpr("node.name"), foldExpr("alias"), foldExpr(`coalesce(node.description, "")`))
+  `, foldedName, foldExpr("alias"), foldExpr(`coalesce(node.description, "")`))
 }
 
 func searchOrganizationsQuery() string {
@@ -100,23 +112,16 @@ func searchOrganizationsQuery() string {
     WHERE %s CONTAINS $q
     RETURN node
     LIMIT 20
-  `, foldExpr("node.name"))
+  `, foldedName)
 }
 
 func searchSanctionsQuery() string {
-	return fmt.Sprintf(`
+	return `
     MATCH (node:Sanction)
-    WHERE %s CONTAINS $q
-       OR %s CONTAINS $q
-       OR %s CONTAINS $q
-       OR %s CONTAINS $q
+    WHERE coalesce(node.search_text, "") CONTAINS $q
     RETURN node
     LIMIT 20
-  `,
-		foldExpr(`coalesce(node.registry, "")`),
-		foldExpr(`coalesce(node.sanction_type, "")`),
-		foldExpr(`coalesce(node.organ, "")`),
-		foldExpr(`coalesce(node.process_ref, "")`))
+  `
 }
 
 func searchProceedingsQuery() string {
@@ -152,7 +157,7 @@ func searchAllQuery() string {
       OR (node:Person AND %s CONTAINS $q)
       OR (node:Scandal AND (%s CONTAINS $q OR ANY(alias IN coalesce(node.aliases, []) WHERE %s CONTAINS $q)))
       OR (node:Organization AND %s CONTAINS $q)
-      OR (node:Sanction AND (%s CONTAINS $q OR %s CONTAINS $q OR %s CONTAINS $q))
+      OR (node:Sanction AND coalesce(node.search_text, "") CONTAINS $q)
       OR (node:LegalProceeding AND (
         ($q_digits <> '' AND %s CONTAINS $q_digits)
         OR %s CONTAINS $q
@@ -163,13 +168,10 @@ func searchAllQuery() string {
     RETURN node
     LIMIT 20
   `,
-		foldExpr("node.name"), foldExpr("alias"),
-		foldExpr("node.name"),
-		foldExpr("node.name"), foldExpr("alias"),
-		foldExpr("node.name"),
-		foldExpr(`coalesce(node.registry, "")`),
-		foldExpr(`coalesce(node.organ, "")`),
-		foldExpr(`coalesce(node.sanction_type, "")`),
+		foldedName, foldExpr("alias"),
+		foldedName,
+		foldedName, foldExpr("alias"),
+		foldedName,
 		caseNorm,
 		foldExpr("node.case_number"),
 		foldExpr("node.class_name"),

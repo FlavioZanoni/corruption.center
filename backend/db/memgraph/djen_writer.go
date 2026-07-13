@@ -80,6 +80,7 @@ func (db *DB) UpsertDjenPerson(ctx context.Context, p DjenPersonUpsert) (string,
 MERGE (p:Person {id: $id})
 SET
   p.name = $name,
+  p.search_name = $search_name,
   p.provenance_source = 'djen',
   p.provenance_comunicacao_id = $comunicacao_id,
   p.provenance_link = $link,
@@ -88,6 +89,7 @@ RETURN p.id AS id
 `, map[string]any{
 		"id":             id,
 		"name":           strings.TrimSpace(p.Name),
+		"search_name":    foldQuery(p.Name),
 		"comunicacao_id": p.ComunicacaoID,
 		"link":           p.Link,
 		"tribunal":       p.Tribunal,
@@ -130,6 +132,7 @@ func (db *DB) UpsertDjenOrganization(ctx context.Context, o DjenOrganizationUpse
 MERGE (o:Organization {id: $id})
 SET
   o.name = $name,
+  o.search_name = $search_name,
   o.provenance_source = 'djen',
   o.provenance_comunicacao_id = $comunicacao_id,
   o.provenance_link = $link,
@@ -138,6 +141,7 @@ RETURN o.id AS id
 `, map[string]any{
 		"id":             id,
 		"name":           strings.TrimSpace(o.Name),
+		"search_name":    foldQuery(o.Name),
 		"comunicacao_id": o.ComunicacaoID,
 		"link":           o.Link,
 		"tribunal":       o.Tribunal,

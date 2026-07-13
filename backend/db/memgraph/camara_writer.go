@@ -28,6 +28,7 @@ ON CREATE SET
   p.tse_profile_urls = COALESCE(p.tse_profile_urls, [])
 SET
   p.name = row.name,
+  p.search_name = row.search_name,
   p.party_current = row.party_current,
   p.role_current = row.role_current,
   // An empty photo from Camara means "not published", not "delete the one we
@@ -52,6 +53,7 @@ RETURN count(p) AS touched
 				"id":            deterministicPoliticianID(r.CPF),
 				"cpf":           r.CPF,
 				"name":          r.Name,
+				"search_name":   foldQuery(r.Name),
 				"party_current": r.PartyCurrent,
 				"role_current":  r.RoleCurrent,
 				"photo_url":     r.PhotoURL,

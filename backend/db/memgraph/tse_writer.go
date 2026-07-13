@@ -28,6 +28,7 @@ ON CREATE SET
   p.active = false
 SET
   p.name = row.name,
+  p.search_name = row.search_name,
   p.party_current = row.party_current,
   p.state = row.state
 WITH p, row,
@@ -68,6 +69,7 @@ RETURN count(p) AS touched
 				"id":               deterministicPoliticianID(r.CPF),
 				"cpf":              r.CPF,
 				"name":             r.Name,
+				"search_name":      foldQuery(r.Name),
 				"party_current":    r.PartyCurrent,
 				"state":            r.State,
 				"name_aliases":     r.NameAliases,
