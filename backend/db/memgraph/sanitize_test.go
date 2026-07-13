@@ -1,6 +1,7 @@
 package memgraph
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -8,9 +9,9 @@ import (
 // username) never reaches a public response.
 func TestSanitizeProperties_StripsPII(t *testing.T) {
 	props := map[string]any{
-		"outcome":           "convicted",
-		"outcome_source":    "human",
-		"outcome_recorded_by": "alice.admin@example.com", // PII: operator's email/username
+		"outcome":              "convicted",
+		"outcome_source":       "human",
+		"outcome_recorded_by":  "alice.admin@example.com", // PII: operator's email/username
 		"outcome_evidence_url": "https://example.com/decision",
 		"outcome_recorded_at":  "2026-07-12T10:00:00Z",
 	}
@@ -44,7 +45,7 @@ func TestSanitizeProperties_StripsMgraphInternals(t *testing.T) {
 		"id":                 "sanc-123",
 		"registry":           "CEIS",
 		"_sanctions_created": "2026-01-15", // Internal scratch field used by sanctions_writer.go
-		"_internal_flag":     true,           // Any Memgraph internal field
+		"_internal_flag":     true,         // Any Memgraph internal field
 		"sanction_type":      "Permanent",
 	}
 
@@ -131,8 +132,8 @@ func TestSanitizeProperties_HandlesEmpty(t *testing.T) {
 func TestSanitizeProperties_FullDefendantInEdge(t *testing.T) {
 	// Simulate what SetDefendantOutcome writes to a DEFENDANT_IN edge
 	edgeProps := map[string]any{
-		"outcome":             "convicted",
-		"outcome_source":      "human",
+		"outcome":              "convicted",
+		"outcome_source":       "human",
 		"outcome_evidence_url": "https://stf.jus.br/decisao/123",
 		"outcome_recorded_by":  "maria.operator@corruption-center.org", // PII
 		"outcome_recorded_at":  "2026-06-15T14:30:00Z",
@@ -191,7 +192,7 @@ func TestSanitizeProperties_OutcomeSourceMustSurvive(t *testing.T) {
 // Publishing a conviction without its source is indefensible.
 func TestSanitizeProperties_EvidenceLinkMustSurvive(t *testing.T) {
 	withEvidence := map[string]any{
-		"outcome":             "convicted",
+		"outcome":              "convicted",
 		"outcome_evidence_url": "https://stf.jus.br/portal/processo/verProcessoFormulario.asp?seqprocesso=123",
 	}
 
@@ -242,14 +243,14 @@ func TestSanitizeProperties_RegressionOutcomeRecordedBy(t *testing.T) {
 func TestSanitizeProperties_RegressionInternalFields(t *testing.T) {
 	// Simulate a sanction with internal working fields
 	sanctionWithInternals := map[string]any{
-		"id":                   "sanc-123",
-		"registry":             "CEIS",
-		"sanction_type":        "Permanent",
-		"_sanctions_created":   "2026-01-01T12:00:00Z", // Internal working field
-		"_processing_status":   "complete",               // Internal working field
-		"_last_updated_by":     "batch-worker",           // Internal working field
-		"_sync_timestamp":      1234567890,               // Internal working field
-		"date_start":           "2026-01-15",
+		"id":                 "sanc-123",
+		"registry":           "CEIS",
+		"sanction_type":      "Permanent",
+		"_sanctions_created": "2026-01-01T12:00:00Z", // Internal working field
+		"_processing_status": "complete",             // Internal working field
+		"_last_updated_by":   "batch-worker",         // Internal working field
+		"_sync_timestamp":    1234567890,             // Internal working field
+		"date_start":         "2026-01-15",
 	}
 
 	sanitized := SanitizeProperties(sanctionWithInternals)
@@ -273,5 +274,30 @@ func TestSanitizeProperties_RegressionInternalFields(t *testing.T) {
 		if !expectedFields[field] {
 			t.Errorf("unexpected field in result: %q", field)
 		}
+	}
+}
+
+// The named-field denylist failed within one working session: outcome_recorded_by
+// was stripped, cnpj_recorded_by (added the same day) leaked. This pins the
+// category, not the instances.
+func TestSanitizeProperties_StripsEveryRecordedByField(t *testing.T) {
+	props := map[string]any{
+		"outcome_recorded_by": "admin",
+		"cnpj_recorded_by":    "admin",
+		"future_recorded_by":  "admin",
+		"outcome_recorded_at": "2026-07-12T00:00:00Z", // timestamps stay
+		"cnpj_source":         "human",                // provenance stays
+	}
+	got := SanitizeProperties(props)
+	for k := range got {
+		if strings.HasSuffix(k, "_recorded_by") {
+			t.Fatalf("operator username leaked through %q", k)
+		}
+	}
+	if _, ok := got["outcome_recorded_at"]; !ok {
+		t.Fatal("timestamp should survive: it identifies nobody")
+	}
+	if _, ok := got["cnpj_source"]; !ok {
+		t.Fatal("provenance should survive: it is what makes the record auditable")
 	}
 }

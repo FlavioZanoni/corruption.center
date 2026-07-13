@@ -303,6 +303,19 @@ export function SanctionCard({ node }: { node: GraphNode }) {
   )
 }
 
+// convictionState reads the three-valued conviction off raw node props. Graph
+// endpoints carry has_conviction only when DataJud actually derived one, so an
+// absent key IS the "never checked" state — and it must never render like an
+// acquittal. "Nao verificado" and "sem condenacao" are different claims.
+function convictionState(node: GraphNode): { label: string; cls: string } {
+  const hc = node.properties?.has_conviction
+  if (hc === true)
+    return { label: "Com condenação", cls: "bg-rose-950/60 text-rose-300" }
+  if (hc === false)
+    return { label: "Sem condenação", cls: "bg-emerald-950/60 text-emerald-300" }
+  return { label: "Não verificado", cls: "bg-surface text-text-dim" }
+}
+
 export function ProceedingCard({ connection }: { connection: Connection }) {
   const { node, edge, via } = connection
   const caseNumber = prop(node, "case_number") ?? node.label
@@ -311,14 +324,25 @@ export function ProceedingCard({ connection }: { connection: Connection }) {
   const phase = prop(node, "phase")
   const outcome = prop(node, "outcome") ?? (edge && (edge.properties.outcome as string | undefined))
   const sourceUrls = (node.properties.source_urls as string[] | undefined) ?? []
+  const conviction = convictionState(node)
+  const href = entityHref("legal_proceeding", node.id)
 
   return (
     <CardShell>
       <div className="mb-1.5 flex flex-wrap items-center gap-2">
         <Scale size={13} strokeWidth={1.5} className="shrink-0 text-[#8b7ec8]" />
         <h3 className="font-mono text-sm leading-tight break-all text-text">
-          {caseNumber}
+          {href ? (
+            <Link href={href} className="hover:text-white transition-colors">
+              {caseNumber}
+            </Link>
+          ) : (
+            caseNumber
+          )}
         </h3>
+        <span className={`rounded px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${conviction.cls}`}>
+          {conviction.label}
+        </span>
       </div>
       <Field label="Tribunal / vara" value={court} />
       <Field label="Situação" value={status ? valueLabel(status) : undefined} />

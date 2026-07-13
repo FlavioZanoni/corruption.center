@@ -44,7 +44,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title,
     description: `Sanção ${s.registry} aplicada por ${s.organ}.`,
-    alternates: { canonical: `${siteUrl}/sancao/${encodeURIComponent(s.id)}` },
+    alternates: { canonical: siteUrl(`/sancao/${encodeURIComponent(s.id)}`) },
   }
 }
 

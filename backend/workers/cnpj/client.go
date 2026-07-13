@@ -18,7 +18,7 @@ const (
 	// defaultRatePerMin is generous for a self-hosted minha receita instance.
 	// Users pointing CNPJ_API_BASE at the shared PUBLIC instance must lower it
 	// (see README): the public instance is a courtesy service.
-	defaultRatePerMin = 60
+	defaultRatePerMin = 30 // matches the documented budget; compose overrides via CNPJ_RATE_PER_MIN
 
 	maxRetries     = 6
 	backoffInitial = 1 * time.Second

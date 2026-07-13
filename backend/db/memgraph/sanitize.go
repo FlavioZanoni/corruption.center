@@ -1,5 +1,7 @@
 package memgraph
 
+import "strings"
+
 // SanitizeProperties removes PII and internal fields from a property map before
 // it is published to the public API. This is a single choke point that all graph
 // and proceeding endpoints route through to ensure no operator credentials or
@@ -21,8 +23,12 @@ func SanitizeProperties(props map[string]any) map[string]any {
 
 	sanitized := make(map[string]any)
 	for key, value := range props {
-		// Strip outcome_recorded_by: operator username PII.
-		if key == "outcome_recorded_by" {
+		// Strip ANY *_recorded_by field, not a named list. The named list already
+		// failed once: outcome_recorded_by was stripped, then AttachOrganizationCNPJ
+		// introduced cnpj_recorded_by in the same session and it sailed straight to
+		// the public API. Every "a human recorded this" field carries the operator's
+		// basic-auth username, so the suffix IS the category.
+		if strings.HasSuffix(key, "_recorded_by") {
 			continue
 		}
 		// Strip Memgraph internal fields (start with underscore).

@@ -60,6 +60,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // The browse pages paginate client-side, so a crawler cannot walk them: the
   // sitemap is the ONLY way a case or a sanction page is ever discovered.
   //
+  // Organizations are indexable but not listed: there is no /api/v1/organizations
+  // enumeration endpoint yet, and most org pages are a bare CNPJ until the
+  // enricher names them. They are reachable through case and sanction pages, so
+  // crawlers still find them by link. Revisit once a list endpoint exists.
+  //
   // /pessoa is deliberately absent. Those are private citizens whose name a court
   // publication printed; they are noindex and robots-disallowed (see robots.ts).
   // Listing them here would be asking a crawler to index the one thing we have

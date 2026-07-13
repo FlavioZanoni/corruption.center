@@ -83,35 +83,22 @@ MERGE (lp)-[:INVESTIGATES]->(s)
 	return nil
 }
 
-// EnsureDefendantInEdge links a Person/Organization node to a LegalProceeding
-// with a DEFENDANT_IN edge carrying an outcome. The DataJud watcher no longer
-// discovers parties (the public API exposes none); this is retained for the
-// DJEN worker, which owns party discovery.
-func (db *DB) EnsureDefendantInEdge(ctx context.Context, nodeType, nodeID, proceedingID, outcome string) error {
-	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(ctx)
-	query := fmt.Sprintf(`
-MATCH (n:%s {id: $node_id})
-MATCH (lp:LegalProceeding {id: $proceeding_id})
-MERGE (n)-[r:DEFENDANT_IN]->(lp)
-SET r.outcome = $outcome
-`, nodeType)
-	_, err := session.Run(ctx, query, map[string]any{"node_id": nodeID, "proceeding_id": proceedingID, "outcome": outcome})
-	if err != nil {
-		return fmt.Errorf("memgraph: ensure defendant edge: %w", err)
-	}
-	return nil
-}
-
 // UpdateProceedingCaseState applies the case-level movement state machine onto
-// a LegalProceeding. phase (when non-empty) sets lp.phase; hasConviction is the
-// value recomputed from the full movement history each poll and is written
-// verbatim (NOT OR-latched) so that a conviction later reversed on appeal, an
-// explicit Absolvição after a Condenação, clears lp.has_conviction rather than
-// leaving a stale (defamation-grade) true; concluded sets lp.status =
-// "concluded". All flags are case-level; per-defendant outcomes are set only
-// via backoffice review (see docs/workerDetails/DATAJUD.md).
-func (db *DB) UpdateProceedingCaseState(ctx context.Context, proceedingID, phase string, hasConviction, concluded bool) error {
+// a LegalProceeding. disposition is three-valued and written verbatim each poll:
+// "conviction" → has_conviction=true, "acquittal" → false, "" → the property is
+// REMOVED (SET to null), because "the movements do not let us say" must render
+// as "não verificado", never as an acquittal. Recomputed-not-latched, so a
+// conviction reversed on appeal clears rather than sticking (defamation-grade
+// if it did not). All flags are case-level; per-defendant outcomes are set only
+// via backoffice review.
+func (db *DB) UpdateProceedingCaseState(ctx context.Context, proceedingID, phase, disposition string, concluded bool) error {
+	var hasConviction any // nil removes the property
+	switch disposition {
+	case "conviction":
+		hasConviction = true
+	case "acquittal":
+		hasConviction = false
+	}
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 	_, err := session.Run(ctx, `

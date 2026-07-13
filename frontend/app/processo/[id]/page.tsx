@@ -86,11 +86,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 function proceedingJsonLd(p: LegalProceedingRecord): Record<string, unknown> {
-  const defendants = p.defendants.map((d) => ({
-    "@type": "Person",
-    name: d.name,
-  }))
-
+  // Deliberately NO defendant list here. The page's HTML shows the names — a case
+  // is public record and omitting its parties would be a lie — but structured data
+  // is different in kind: a schema.org Person entity is a machine-readable
+  // invitation to index a private citizen by name, which is exactly what
+  // /pessoa's noindex was built to prevent. The public record stays readable;
+  // it does not get amplified.
   return {
     "@context": "https://schema.org",
     "@type": "LegalCase",
@@ -99,7 +100,6 @@ function proceedingJsonLd(p: LegalProceedingRecord): Record<string, unknown> {
     ...(p.court ? { location: { "@type": "Place", name: p.court } } : {}),
     ...(p.status ? { status: p.status } : {}),
     ...(p.phase ? { phase: p.phase } : {}),
-    ...(defendants.length ? { defendant: defendants } : {}),
     ...(p.scandal ? { about: { "@type": "Event", name: p.scandal.name } } : {}),
   }
 }
@@ -211,7 +211,7 @@ export default async function ProcessoPage({ params }: Props) {
 
         {/* ── Defendants ── */}
         <Section
-          title="Acusados / Citados"
+          title="Partes citadas no processo"
           count={p.defendants.length}
           color={PROCEEDING_COLOR}
         >
@@ -246,7 +246,11 @@ function DefendantCard({ defendant }: { defendant: DefendantInfo }) {
     defendant.properties?.outcome_source === "human"
   const evidenceUrl = defendant.properties?.outcome_evidence_url
 
-  const body = (
+  // A plain <div> with SIBLING links. Wrapping the card in <Link> nested the
+  // evidence <a> inside it — the exact hydration bug fixed on /sancoes the same
+  // day, reintroduced here. It also swallowed the click on the one link that
+  // matters most: the decision itself.
+  return (
     <div className="rounded-sm border border-border bg-surface px-4 py-3">
       <div className="mb-1 flex items-center gap-2">
         <NodeIcon type={defendant.type.toLowerCase() as any} />
@@ -255,7 +259,13 @@ function DefendantCard({ defendant }: { defendant: DefendantInfo }) {
         </span>
       </div>
       <h3 className="font-serif text-sm leading-tight text-text break-all">
-        {defendant.name}
+        {href ? (
+          <Link href={href} className="hover:text-white transition-colors">
+            {defendant.name}
+          </Link>
+        ) : (
+          defendant.name
+        )}
       </h3>
 
       {/* Outcome badge */}
@@ -291,14 +301,6 @@ function DefendantCard({ defendant }: { defendant: DefendantInfo }) {
         </div>
       )}
     </div>
-  )
-
-  return href ? (
-    <Link href={href} className="block transition-colors hover:opacity-80">
-      {body}
-    </Link>
-  ) : (
-    body
   )
 }
 

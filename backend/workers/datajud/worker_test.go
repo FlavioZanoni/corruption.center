@@ -44,256 +44,121 @@ func TestProbeCapabilities(t *testing.T) {
 	}
 }
 
-func TestDeriveCaseState_Accepted(t *testing.T) {
-	movs := movementsFromJSON(t, `[{"id":"1","codigo":"51","nome":"Recebimento de denúncia"}]`)
-	st := deriveCaseState(movs)
-	if st.phase != "accepted" {
-		t.Fatalf("code 51: expected phase accepted, got %q", st.phase)
+// ─── deriveCaseState: fixtures use the REAL TPU codes and names verified in live
+// DataJud responses (219 Procedência, 220 Improcedência, 221 em Parte, 22 Baixa
+// Definitiva, 848 Trânsito em julgado, 60 Expedição de documento). The previous
+// suite encoded a fictional table (60=Condenação) and passed while the graph
+// marked 2,082 cases convicted in error. ─────────────────────────────────────────
+
+const criminalClass = "Ação Penal - Procedimento Ordinário"
+
+func mov(code int, nome, when string) map[string]any {
+	m := map[string]any{"codigo": float64(code), "nome": nome}
+	if when != "" {
+		m["dataHora"] = when
 	}
-	if st.hasConviction || st.concluded {
-		t.Fatalf("code 51: expected no conviction/conclusion, got %+v", st)
-	}
+	return m
 }
 
-func TestDeriveCaseState_Sentenced(t *testing.T) {
-	movs := movementsFromJSON(t, `[{"id":"9","codigo":"848","nome":"Sentença"}]`)
-	st := deriveCaseState(movs)
-	if st.phase != "sentenced" {
-		t.Fatalf("code 848: expected phase sentenced, got %q", st.phase)
+func TestDeriveCaseState_ClericalCode60NeverConvicts(t *testing.T) {
+	// The bug this suite exists to prevent: code 60 is "Expedição de documento",
+	// present in nearly every case. It must derive NOTHING.
+	movs := []map[string]any{
+		mov(60, "Expedição de documento", "2020-01-01T00:00:00"),
+		mov(60, "Expedição de documento", "2021-01-01T00:00:00"),
+		mov(51, "Conclusão", "2021-02-01T00:00:00"),
+		mov(132, "Recebimento", "2021-03-01T00:00:00"),
 	}
-}
-
-func TestDeriveCaseState_SentencedOverridesAccepted(t *testing.T) {
-	// 848 must win over 51 regardless of movement order.
-	forward := movementsFromJSON(t, `[{"id":"1","codigo":"51"},{"id":"9","codigo":"848"}]`)
-	reverse := movementsFromJSON(t, `[{"id":"9","codigo":"848"},{"id":"1","codigo":"51"}]`)
-	if st := deriveCaseState(forward); st.phase != "sentenced" {
-		t.Fatalf("forward order: expected sentenced, got %q", st.phase)
-	}
-	if st := deriveCaseState(reverse); st.phase != "sentenced" {
-		t.Fatalf("reverse order: expected sentenced, got %q", st.phase)
-	}
-}
-
-func TestDeriveCaseState_Conviction(t *testing.T) {
-	movs := movementsFromJSON(t, `[{"id":"5","codigo":"60","nome":"Condenação"}]`)
-	st := deriveCaseState(movs)
-	if !st.hasConviction {
-		t.Fatalf("code 60: expected has_conviction true, got %+v", st)
+	st := deriveCaseState(criminalClass, movs)
+	if st.disposition != "" {
+		t.Fatalf("clerical movements produced disposition %q", st.disposition)
 	}
 	if st.concluded {
-		t.Fatalf("code 60: conviction alone must not conclude the case")
+		t.Fatal("132 is 'Recebimento', not a conclusion")
 	}
 }
 
-func TestDeriveCaseState_AcquittalTimelineOnly(t *testing.T) {
-	movs := movementsFromJSON(t, `[{"id":"6","codigo":"61","nome":"Absolvição"}]`)
-	st := deriveCaseState(movs)
-	if st.phase != "" || st.hasConviction || st.concluded {
-		t.Fatalf("code 61: expected timeline-only (no flags), got %+v", st)
+func TestDeriveCaseState_ProcedenciaConvicts(t *testing.T) {
+	movs := []map[string]any{
+		mov(391, "Denúncia", "2016-01-01T00:00:00"),
+		mov(219, "Procedência", "2017-01-01T00:00:00"),
+		mov(848, "Trânsito em julgado", "2018-01-01T00:00:00"),
+		mov(22, "Baixa Definitiva", "2019-01-01T00:00:00"),
+	}
+	st := deriveCaseState(criminalClass, movs)
+	if !st.hasConviction() {
+		t.Fatal("Procedência on a criminal action is the conviction")
+	}
+	if !st.concluded || st.phase != "sentenced" {
+		t.Fatalf("want concluded+sentenced, got %+v", st)
 	}
 }
 
-func TestDeriveCaseState_Concluded(t *testing.T) {
-	for _, code := range []string{"901", "132", "246"} {
-		movs := movementsFromJSON(t, `[{"id":"7","codigo":"`+code+`"}]`)
-		st := deriveCaseState(movs)
-		if !st.concluded {
-			t.Fatalf("code %s: expected concluded true, got %+v", code, st)
-		}
+func TestDeriveCaseState_ImprocedenteIsNotProcedente(t *testing.T) {
+	// "julgo improcedente" CONTAINS "procedente": ordering of checks is the test.
+	st := deriveCaseState(criminalClass, []map[string]any{
+		mov(220, "Improcedência", "2020-01-01T00:00:00"),
+	})
+	if st.disposition != "acquittal" {
+		t.Fatalf("improcedência must read as acquittal, got %q", st.disposition)
 	}
 }
 
-func TestDeriveCaseState_FullConvictedLifecycle(t *testing.T) {
-	// A conviction case-tree: denúncia accepted, sentença, condenação, then
-	// baixa definitiva. Case-level flags only; no per-defendant attribution.
-	movs := movementsFromJSON(t, `[
-		{"id":"1","codigo":"51","nome":"Recebimento de denúncia"},
-		{"id":"2","codigo":"848","nome":"Sentença"},
-		{"id":"3","codigo":"60","nome":"Condenação"},
-		{"id":"4","codigo":"132","nome":"Baixa definitiva"}
-	]`)
-	st := deriveCaseState(movs)
-	if st.phase != "sentenced" {
-		t.Fatalf("lifecycle: expected phase sentenced, got %q", st.phase)
+func TestDeriveCaseState_LaterAcquittalClearsConviction(t *testing.T) {
+	// Reversal on appeal: latching the conviction would be defamation.
+	movs := []map[string]any{
+		mov(219, "Procedência", "2017-01-01T00:00:00"),
+		mov(0, "Absolvição", "2019-01-01T00:00:00"),
 	}
-	if !st.hasConviction {
-		t.Fatalf("lifecycle: expected has_conviction true")
+	if st := deriveCaseState(criminalClass, movs); st.hasConviction() {
+		t.Fatal("a later absolvição must clear the conviction")
 	}
-	if !st.concluded {
-		t.Fatalf("lifecycle: expected concluded true")
+	// And chronological order must come from timestamps, not slice order.
+	reversed := []map[string]any{movs[1], movs[0]}
+	if st := deriveCaseState(criminalClass, reversed); st.hasConviction() {
+		t.Fatal("timestamp order, not input order, decides which disposition is last")
 	}
 }
 
-func TestDeriveCaseState_SentencaComplementConviction(t *testing.T) {
-	cases := []struct {
-		name          string
-		movs          string
-		wantPhase     string
-		wantConvicted bool
-	}{
-		{
-			name:          "848 with condenatória complement infers conviction",
-			movs:          `[{"id":"9","codigo":"848","nome":"Sentença","complementosTabelados":[{"nome":"Sentença condenatória","descricao":"tipo de decisão"}]}]`,
-			wantPhase:     "sentenced",
-			wantConvicted: true,
-		},
-		{
-			name:          "848 with procedente complement infers conviction",
-			movs:          `[{"id":"9","codigo":"848","nome":"Sentença","complementosTabelados":[{"nome":"Com resolução do mérito","descricao":"Procedente"}]}]`,
-			wantPhase:     "sentenced",
-			wantConvicted: true,
-		},
-		{
-			name:          "848 with improcedente complement is not a conviction",
-			movs:          `[{"id":"9","codigo":"848","nome":"Sentença","complementosTabelados":[{"nome":"Com resolução do mérito","descricao":"Improcedente"}]}]`,
-			wantPhase:     "sentenced",
-			wantConvicted: false,
-		},
-		{
-			name:          "848 with absolvição complement is not a conviction",
-			movs:          `[{"id":"9","codigo":"848","nome":"Sentença","complementosTabelados":[{"nome":"Sentença absolutória","descricao":"absolvição do réu"}]}]`,
-			wantPhase:     "sentenced",
-			wantConvicted: false,
-		},
-		{
-			name:          "848 with no complements is sentenced only",
-			movs:          `[{"id":"9","codigo":"848","nome":"Sentença"}]`,
-			wantPhase:     "sentenced",
-			wantConvicted: false,
-		},
-		{
-			name:          "848 with unrelated complement is sentenced only",
-			movs:          `[{"id":"9","codigo":"848","nome":"Sentença","complementosTabelados":[{"nome":"Homologação de acordo","descricao":"outros"}]}]`,
-			wantPhase:     "sentenced",
-			wantConvicted: false,
-		},
-		{
-			name:          "explicit code 60 wins over improcedente 848 complement",
-			movs:          `[{"id":"9","codigo":"848","nome":"Sentença","complementosTabelados":[{"nome":"Improcedente","descricao":""}]},{"id":"10","codigo":"60","nome":"Condenação"}]`,
-			wantPhase:     "sentenced",
-			wantConvicted: true,
-		},
-		{
-			name:          "explicit code 61 wins over condenatória 848 complement",
-			movs:          `[{"id":"9","codigo":"848","nome":"Sentença","complementosTabelados":[{"nome":"Sentença condenatória","descricao":""}]},{"id":"10","codigo":"61","nome":"Absolvição"}]`,
-			wantPhase:     "sentenced",
-			wantConvicted: false,
-		},
-		{
-			name:          "conflicting 848 complements do not assert conviction",
-			movs:          `[{"id":"9","codigo":"848","nome":"Sentença","complementosTabelados":[{"nome":"Procedente em parte","descricao":""},{"nome":"Improcedente quanto a um réu","descricao":""}]}]`,
-			wantPhase:     "sentenced",
-			wantConvicted: false,
-		},
+func TestDeriveCaseState_ExtinctionOfPunibilityMeansCannotSay(t *testing.T) {
+	// Prescrição/morte may follow a conviction or preempt any judgment; either
+	// affirmative claim would be wrong half the time.
+	movs := []map[string]any{
+		mov(219, "Procedência", "2017-01-01T00:00:00"),
+		mov(1042, "Morte do Agente", "2020-01-01T00:00:00"),
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			st := deriveCaseState(movementsFromJSON(t, tc.movs))
-			if st.phase != tc.wantPhase {
-				t.Fatalf("phase: got %q, want %q", st.phase, tc.wantPhase)
-			}
-			if st.hasConviction != tc.wantConvicted {
-				t.Fatalf("hasConviction: got %v, want %v (state %+v)", st.hasConviction, tc.wantConvicted, st)
-			}
-		})
+	if st := deriveCaseState(criminalClass, movs); st.disposition != "" {
+		t.Fatalf("extinction must reset to undeterminable, got %q", st.disposition)
 	}
 }
 
-func TestDeriveCaseState_ExplicitDispositionOrderWins(t *testing.T) {
-	// A conviction (60) followed by a later explicit acquittal (61), e.g.,
-	// reversed on appeal, must NOT latch: the last explicit disposition wins,
-	// so the case ends acquitted (has_conviction=false). This is the
-	// defamation-grade regression the fix targets.
-	convictionThenAcquittal := movementsFromJSON(t, `[
-		{"id":"1","codigo":"51","nome":"Recebimento de denúncia","dataHora":"2016-01-01T10:00:00Z"},
-		{"id":"2","codigo":"848","nome":"Sentença","dataHora":"2016-02-01T10:00:00Z"},
-		{"id":"3","codigo":"60","nome":"Condenação","dataHora":"2016-03-01T10:00:00Z"},
-		{"id":"4","codigo":"61","nome":"Absolvição","dataHora":"2017-06-01T10:00:00Z"}
-	]`)
-	if st := deriveCaseState(convictionThenAcquittal); st.hasConviction {
-		t.Fatalf("conviction→acquittal: expected has_conviction=false (cleared), got %+v", st)
+func TestDeriveCaseState_CivilCaseNeverGetsADisposition(t *testing.T) {
+	// A live Apelação Cível was marked convicted. Civil procedência is
+	// liability, not crime.
+	movs := []map[string]any{
+		mov(219, "Procedência", "2020-01-01T00:00:00"),
 	}
-
-	// The reverse order: acquittal first, later conviction; ends convicted.
-	acquittalThenConviction := movementsFromJSON(t, `[
-		{"id":"1","codigo":"61","nome":"Absolvição","dataHora":"2016-03-01T10:00:00Z"},
-		{"id":"2","codigo":"60","nome":"Condenação","dataHora":"2017-06-01T10:00:00Z"}
-	]`)
-	if st := deriveCaseState(acquittalThenConviction); !st.hasConviction {
-		t.Fatalf("acquittal→conviction: expected has_conviction=true, got %+v", st)
+	if st := deriveCaseState("Apelação Cível", movs); st.disposition != "" {
+		t.Fatalf("civil class must never carry has_conviction, got %q", st.disposition)
 	}
 }
 
-func TestDeriveCaseState_ResolvesByTimestampNotInputOrder(t *testing.T) {
-	// Input order lists the acquittal LAST but its dataHora is EARLIER than the
-	// conviction: the chronological sort must make the conviction win despite
-	// the input order.
-	unsorted := movementsFromJSON(t, `[
-		{"id":"2","codigo":"60","nome":"Condenação","dataHora":"2018-01-01T10:00:00Z"},
-		{"id":"1","codigo":"61","nome":"Absolvição","dataHora":"2016-01-01T10:00:00Z"}
-	]`)
-	if st := deriveCaseState(unsorted); !st.hasConviction {
-		t.Fatalf("unsorted-by-time: conviction is chronologically last, expected has_conviction=true, got %+v", st)
+func TestDeriveCaseState_AppellateProvimentoIsIgnored(t *testing.T) {
+	// Provimento without knowing whose appeal is uninterpretable.
+	movs := []map[string]any{
+		mov(237, "Provimento", "2020-01-01T00:00:00"),
+		mov(239, "Não-Provimento", "2021-01-01T00:00:00"),
 	}
-
-	// Symmetric case: acquittal is chronologically last despite appearing first
-	// in the input slice.
-	unsortedAcquittalLast := movementsFromJSON(t, `[
-		{"id":"1","codigo":"61","nome":"Absolvição","dataHora":"2018-01-01T10:00:00Z"},
-		{"id":"2","codigo":"60","nome":"Condenação","dataHora":"2016-01-01T10:00:00Z"}
-	]`)
-	if st := deriveCaseState(unsortedAcquittalLast); st.hasConviction {
-		t.Fatalf("unsorted-by-time: acquittal is chronologically last, expected has_conviction=false, got %+v", st)
+	if st := deriveCaseState("Apelação Criminal", movs); st.disposition != "" {
+		t.Fatalf("appellate provimento must stay undeterminable, got %q", st.disposition)
 	}
 }
 
-func TestDeriveCaseState_MissingTimestampsFallBackToInputOrder(t *testing.T) {
-	// With no dataHora fields, the last explicit disposition in input order wins.
-	acquittalLast := movementsFromJSON(t, `[
-		{"id":"1","codigo":"60","nome":"Condenação"},
-		{"id":"2","codigo":"61","nome":"Absolvição"}
-	]`)
-	if st := deriveCaseState(acquittalLast); st.hasConviction {
-		t.Fatalf("no timestamps, acquittal last: expected has_conviction=false, got %+v", st)
+func TestFoldPT(t *testing.T) {
+	if got := foldPT("Extinção da Punibilidade"); got != "extincao da punibilidade" {
+		t.Fatalf("fold: %q", got)
 	}
-	convictionLast := movementsFromJSON(t, `[
-		{"id":"1","codigo":"61","nome":"Absolvição"},
-		{"id":"2","codigo":"60","nome":"Condenação"}
-	]`)
-	if st := deriveCaseState(convictionLast); !st.hasConviction {
-		t.Fatalf("no timestamps, conviction last: expected has_conviction=true, got %+v", st)
-	}
-}
-
-func TestDeriveCaseState_SentencaNomeAndPlainComplementos(t *testing.T) {
-	// 848 whose disposition is only in the movement nome (no complements) →
-	// convicted.
-	nomeOnly := movementsFromJSON(t, `[{"id":"9","codigo":"848","nome":"Sentença condenatória"}]`)
-	if st := deriveCaseState(nomeOnly); !st.hasConviction || st.phase != "sentenced" {
-		t.Fatalf("848 nome condenatória: expected sentenced+convicted, got %+v", st)
-	}
-
-	// 848 whose disposition is only in the plain complementos string-list →
-	// convicted.
-	plainList := movementsFromJSON(t, `[{"id":"9","codigo":"848","nome":"Sentença","complementos":["Julgado procedente o pedido"]}]`)
-	if st := deriveCaseState(plainList); !st.hasConviction || st.phase != "sentenced" {
-		t.Fatalf("848 plain complementos procedente: expected sentenced+convicted, got %+v", st)
-	}
-
-	// Acquittal disposition in the plain complementos list is detected and rules
-	// out a conviction.
-	plainAcquittal := movementsFromJSON(t, `[{"id":"9","codigo":"848","nome":"Sentença","complementos":["Pedido julgado improcedente"]}]`)
-	if st := deriveCaseState(plainAcquittal); st.hasConviction {
-		t.Fatalf("848 plain complementos improcedente: expected not convicted, got %+v", st)
-	}
-}
-
-func TestDeriveCaseState_NumericCodesTolerated(t *testing.T) {
-	// DataJud may serialize codigo as a JSON number; movementCode must coerce it.
-	movs := []map[string]any{{"codigo": float64(51)}, {"codigo": 848}}
-	st := deriveCaseState(movs)
-	if st.phase != "sentenced" {
-		t.Fatalf("numeric codes: expected sentenced, got %q", st.phase)
+	if got := foldPT("Trânsito em Julgado"); got != "transito em julgado" {
+		t.Fatalf("fold: %q", got)
 	}
 }

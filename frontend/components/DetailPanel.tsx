@@ -20,6 +20,7 @@ import { fetchExpandGraph } from "@/lib/api/graph";
 import type { GraphNode, GraphEdge } from "@/lib/types";
 import { NODE_COLORS } from "@/lib/constants";
 import { NODE_TYPE_LABELS, EDGE_TYPE_LABELS } from "@/lib/entity-labels";
+import { entityHref as entityPageHref } from "@/components/EntityUI";
 import { ProvenanceBadge, ReviewBadge } from "@/components/ProvenanceBadge";
 import { porExtenso, estilo } from "numero-por-extenso";
 
@@ -425,14 +426,10 @@ export function DetailPanel() {
 
   const ringColor = NODE_COLORS[node?.type ?? ""] ?? "#555555";
 
-  // Politicians and scandals have a permanent, server-rendered page of their
-  // own: the panel is a preview, that page is the citable record.
-  const entityHref =
-    node?.type === "politician"
-      ? `/politico/${encodeURIComponent(node.id)}`
-      : node?.type === "scandal"
-        ? `/escandalo/${encodeURIComponent(node.id)}`
-        : null;
+  // Every entity type now has a permanent, server-rendered page: the panel is a
+  // preview, that page is the citable record. This used to cover only politician
+  // and scandal, which made the panel a dead end for the four types added since.
+  const entityHref = node ? (entityPageHref(node.type, node.id) ?? null) : null;
   const entityLinkLabel =
     node?.type === "politician" ? "Página do político" : "Ver página completa";
 

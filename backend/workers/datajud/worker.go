@@ -215,7 +215,7 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 			continue
 		}
 
-		state := deriveCaseState(src.Movimentos)
+		state := deriveCaseState(proceedingClassName(src.Classe), src.Movimentos)
 
 		newStatus := c.Status
 		if state.concluded {
@@ -273,92 +273,129 @@ func (w *Worker) applyCaseWrites(ctx context.Context, c psql.WatcherCase, src *C
 		}
 	}
 
-	if err := w.mg.UpdateProceedingCaseState(ctx, proceedingID, state.phase, state.hasConviction, state.concluded); err != nil {
+	if err := w.mg.UpdateProceedingCaseState(ctx, proceedingID, state.phase, state.disposition, state.concluded); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// caseState is the case-level status derived from movements. All flags are
-// case-level; per-defendant outcomes are set only via backoffice review using
-// DJEN evidence (see docs/workerDetails/DATAJUD.md).
+// caseState is what one poll of a case's movement history supports claiming.
+// disposition is deliberately three-valued: "conviction", "acquittal", or "" —
+// and "" means WE CANNOT SAY, which is not the same claim as an acquittal. A
+// boolean here was one of the two bugs that marked 2,082 cases convicted.
 type caseState struct {
-	phase         string // "" | "accepted" | "sentenced"
-	hasConviction bool
-	concluded     bool
+	phase       string // "" | "sentenced"
+	disposition string // "conviction" | "acquittal" | "" (undeterminable)
+	concluded   bool
 }
 
-// deriveCaseState implements the case-level movement state machine:
+// hasConviction/hasAcquittal are conveniences for tests and callers.
+func (c caseState) hasConviction() bool { return c.disposition == "conviction" }
+
+// deriveCaseState derives the case-level disposition from DataJud movements.
 //
-//	51  Recebimento de denúncia   -> phase = accepted
-//	848 Sentença                  -> phase = sentenced (+ complement inference)
-//	60  Condenação                -> has_conviction = true
-//	61  Absolvição                -> explicitly not a conviction (timeline only)
-//	901 Prescrição                -> concluded
-//	132 Baixa definitiva          -> concluded
-//	246 Arquivamento definitivo   -> concluded
+// HISTORY, because this went badly once: the first implementation trusted a
+// hardcoded TPU table claiming 60=Condenação, 61=Absolvição, 848=Sentença,
+// 51=Recebimento da denúncia, 132=Baixa definitiva. Verified against the live
+// API across three tribunals, every one of those was wrong: 60 is "Expedição de
+// documento" — a clerical act present in nearly every case — 61 never occurs,
+// 848 is "Trânsito em julgado", 51 is "Conclusão", 132 is "Recebimento". Result:
+// 2,082 of 2,344 polled cases marked convicted, an 89% "conviction rate" that
+// was 100% artifact. The safety net (VerifyMovementCodes against the CNJ SGT
+// page) silently no-ops because that page ignores its query parameter.
 //
-// sentenced takes precedence over accepted regardless of movement order.
-//
-// Conviction is derived with precedence: an explicit disposition movement
-// (code 60 Condenação / 61 Absolvição) always wins over any 848 inference, and
-// the LAST explicit disposition in chronological order is authoritative; a
-// conviction reversed on appeal (a later Absolvição) must clear the conviction
-// rather than latch it (defamation-grade if it did not). Movements are
-// evaluated in chronological order by dataHora, falling back to input order
-// when timestamps are missing or equal. When no explicit 60/61 exists, the
-// disposition of a Sentença (848) is inferred from its nome, complementos, and
-// complementosTabelados: convictions frequently live there (e.g. "Sentença
-// condenatória", "Procedente") rather than as a standalone code-60 movement, so
-// scanning them avoids losing convictions.
-func deriveCaseState(movs []map[string]any) caseState {
+// The rule now:
+//   - Signals come from each movement's own nome (folded), corroborated by the
+//     codes we VERIFIED in live data: 219 Procedência, 220 Improcedência,
+//     221 Procedência em Parte, 1042 Morte do agente.
+//   - "improcedên"/"absolvi"/220 → acquittal. Checked BEFORE the conviction
+//     patterns because "julgo improcedente" contains "procedente".
+//   - "condena"/"procedên"/"procedente"/219/221 → conviction (in a criminal
+//     action, procedência of the denúncia IS the conviction).
+//   - "extinção da punibilidade"/1042 → clears to acquittal-equivalent "not
+//     convicted"? NO — it clears to "" (cannot say): extinction may follow a
+//     conviction (prescrição da pena) or precede any judgment. Claiming either
+//     way would be wrong half the time, so it resets the disposition.
+//   - The LAST dispositive movement in chronological order wins, so an appeal
+//     that reverses a conviction clears it (defamation-grade if it latched).
+//   - Appellate provimento/não-provimento movements are IGNORED: without
+//     knowing whose appeal was granted they are uninterpretable, so appeal-class
+//     cases generally stay "" — honest, not timid.
+//   - The whole derivation is gated on the case class being criminal (folded
+//     class contains "penal" or "criminal" or "crime"): a live Apelação Cível
+//     was found marked convicted, and civil "procedência" is liability, not a
+//     crime. Non-criminal cases never get a disposition.
+//   - concluded: 22 Baixa Definitiva (verified) or 848 Trânsito em julgado.
+//     phase "sentenced" only when a dispositive signal was actually seen.
+func deriveCaseState(className string, movs []map[string]any) caseState {
 	var st caseState
-	var inferredConviction, inferredAcquittal bool
-	// lastExplicit tracks the most recent (chronological) explicit disposition:
-	// "conviction" (code 60), "acquittal" (code 61), or "" when none was seen.
-	lastExplicit := ""
-	for _, m := range movementsChronological(movs) {
-		switch movementCode(m) {
-		case "51":
-			if st.phase == "" {
-				st.phase = "accepted"
-			}
-		case "848":
-			st.phase = "sentenced"
-			conv, acq := sentencaComplementSignals(m)
-			if conv {
-				inferredConviction = true
-			}
-			if acq {
-				inferredAcquittal = true
-			}
-		case "60":
-			// Condenação. Overwrites any earlier explicit disposition so the
-			// latest one wins.
-			lastExplicit = "conviction"
-		case "61":
-			// Absolvição (e.g. reversed on appeal). Overwrites any earlier
-			// explicit disposition so a later acquittal clears an earlier
-			// conviction rather than latching it.
-			lastExplicit = "acquittal"
-		case "901", "132", "246":
-			st.concluded = true
+
+	criminal := false
+	fc := foldPT(className)
+	for _, marker := range []string{"penal", "criminal", "crime"} {
+		if strings.Contains(fc, marker) {
+			criminal = true
+			break
 		}
 	}
 
-	switch {
-	case lastExplicit == "conviction":
-		// Latest explicit code 60 wins regardless of any 848 complement text.
-		st.hasConviction = true
-	case lastExplicit == "acquittal":
-		// Latest explicit code 61 wins over any 848 inference.
-		st.hasConviction = false
-	case inferredConviction && !inferredAcquittal:
-		// 848 complement indicates a conviction with no conflicting acquittal.
-		st.hasConviction = true
+	for _, m := range movementsChronological(movs) {
+		code := movementCode(m)
+		nome := foldPT(movementNome(m))
+
+		if code == "22" || strings.Contains(nome, "transito em julgado") || code == "848" {
+			st.concluded = true
+		}
+		if !criminal {
+			continue
+		}
+
+		switch {
+		// Order matters: "julgo improcedente" contains "procedente".
+		case strings.Contains(nome, "improceden") || code == "220":
+			st.disposition = "acquittal"
+			st.phase = "sentenced"
+		case strings.Contains(nome, "absolvi"):
+			st.disposition = "acquittal"
+			st.phase = "sentenced"
+		case strings.Contains(nome, "extincao da punibilidade") ||
+			strings.Contains(nome, "extinta a punibilidade") || code == "1042":
+			// Punibility extinguished: may follow a conviction (prescrição) or
+			// preempt any judgment. Either claim would be wrong half the time.
+			st.disposition = ""
+		case strings.Contains(nome, "condena"):
+			st.disposition = "conviction"
+			st.phase = "sentenced"
+		case strings.Contains(nome, "proceden") || code == "219" || code == "221":
+			st.disposition = "conviction"
+			st.phase = "sentenced"
+		}
 	}
 	return st
+}
+
+// foldPT lowercases and strips the Portuguese accents that appear in TPU
+// movement names, so signal matching is spelling-insensitive.
+func foldPT(s string) string {
+	s = strings.ToLower(s)
+	r := strings.NewReplacer(
+		"á", "a", "â", "a", "ã", "a", "à", "a",
+		"é", "e", "ê", "e",
+		"í", "i",
+		"ó", "o", "ô", "o", "õ", "o",
+		"ú", "u", "ü", "u",
+		"ç", "c",
+	)
+	return r.Replace(s)
+}
+
+// movementNome extracts the movement's own display name as sent by the tribunal.
+func movementNome(m map[string]any) string {
+	if v, ok := m["nome"].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // movementsChronological returns a copy of movs sorted by dataHora ascending.
@@ -401,33 +438,6 @@ func movementTime(m map[string]any) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
-}
-
-// sentencaComplementSignals inspects a Sentença (code 848) movement to infer
-// its disposition when no explicit Condenação (60) / Absolvição (61) movement is
-// present. It scans the movement's nome, its plain complementos string-list, and
-// its complementosTabelados nome/descricao entries: a conviction may be encoded
-// in any of them (e.g. nome "Sentença condenatória" with no tabulated
-// complement). All text is normalized to lowercase and accent-folded before
-// matching. Because "improcedente" contains "procedente", acquittal signals are
-// checked first and win within a single text fragment.
-func sentencaComplementSignals(m map[string]any) (conviction, acquittal bool) {
-	texts := []string{foldText(mapString(m, "nome"))}
-	for _, c := range stringList(m["complementos"]) {
-		texts = append(texts, foldText(c))
-	}
-	for _, cm := range complementList(m["complementosTabelados"]) {
-		texts = append(texts, foldText(fmt.Sprintf("%v %v", cm["nome"], cm["descricao"])))
-	}
-	for _, text := range texts {
-		switch {
-		case strings.Contains(text, "improcedente"), strings.Contains(text, "absolv"):
-			acquittal = true
-		case strings.Contains(text, "conden"), strings.Contains(text, "procedente"):
-			conviction = true
-		}
-	}
-	return conviction, acquittal
 }
 
 // stringList coerces a plain string-list field (e.g. movimentos[].complementos)
