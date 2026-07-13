@@ -286,7 +286,7 @@ func nodeToPolit(n neo4j.Node) *models.Politician {
 	return &models.Politician{
 		ID:               strProp(p, "id"),
 		Name:             strProp(p, "name"),
-		CPF:              strProp(p, "cpf"),
+		CPF:              maskCPF(strProp(p, "cpf")),
 		NameAliases:      strSliceProp(p, "name_aliases"),
 		PartyCurrent:     strProp(p, "party_current"),
 		RoleCurrent:      strProp(p, "role_current"),

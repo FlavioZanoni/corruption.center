@@ -35,6 +35,15 @@ func SanitizeProperties(props map[string]any) map[string]any {
 		if len(key) > 0 && key[0] == '_' {
 			continue
 		}
+		// A full CPF is used internally for matching but must never leave intact:
+		// mask it to the source's own ***.XXX.XXX-** form. Also covers
+		// provenance_masked_cpf (already masked -> unchanged) harmlessly.
+		if key == "cpf" {
+			if str, ok := value.(string); ok {
+				sanitized[key] = maskCPF(str)
+				continue
+			}
+		}
 		sanitized[key] = value
 	}
 	return sanitized

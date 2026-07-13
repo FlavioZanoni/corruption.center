@@ -301,3 +301,31 @@ func TestSanitizeProperties_StripsEveryRecordedByField(t *testing.T) {
 		t.Fatal("provenance should survive: it is what makes the record auditable")
 	}
 }
+
+// A full CPF used internally for matching must never leave the API intact. 16,938
+// Person nodes carried one and it was being served to anonymous callers.
+func TestSanitizeProperties_MasksFullCPF(t *testing.T) {
+	got := SanitizeProperties(map[string]any{"cpf": "00000942855", "name": "X"})
+	if got["cpf"] != "***.009.428-**" {
+		t.Fatalf("full CPF not masked: %v", got["cpf"])
+	}
+	// An already-masked or non-CPF value passes through untouched.
+	if got := SanitizeProperties(map[string]any{"cpf": "***.435.151-**"}); got["cpf"] != "***.435.151-**" {
+		t.Fatalf("masked CPF should pass through: %v", got["cpf"])
+	}
+}
+
+func TestMaskCPF(t *testing.T) {
+	cases := map[string]string{
+		"00000942855":    "***.009.428-**",
+		"12345678901":    "***.456.789-**",
+		"***.435.151-**": "***.435.151-**", // already masked
+		"":               "",
+		"12345678000199": "12345678000199", // CNPJ, untouched
+	}
+	for in, want := range cases {
+		if got := maskCPF(in); got != want {
+			t.Fatalf("maskCPF(%q)=%q want %q", in, got, want)
+		}
+	}
+}

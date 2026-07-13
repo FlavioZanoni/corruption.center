@@ -34,7 +34,7 @@ func (db *DB) QueryPerson(ctx context.Context, id string) (*models.PersonProfile
 		person = &models.Person{
 			ID:                    strProp(props, "id"),
 			Name:                  strProp(props, "name"),
-			CPF:                   strProp(props, "cpf"),
+			CPF:                   maskCPF(strProp(props, "cpf")),
 			ProvenanceSource:      strProp(props, "provenance_source"),
 			ProvenanceLink:        strProp(props, "provenance_link"),
 			ProvenanceTribunal:    strProp(props, "provenance_tribunal"),
