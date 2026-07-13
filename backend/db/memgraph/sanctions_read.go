@@ -84,13 +84,11 @@ func (db *DB) QuerySanctions(ctx context.Context, registry, organ, q, sort strin
 		params["organ"] = organ
 	}
 	if q != "" {
-		filters = append(filters, fmt.Sprintf("(%s CONTAINS $q OR %s CONTAINS $q OR %s CONTAINS $q OR %s CONTAINS $q OR %s CONTAINS $q)",
-			foldExpr("coalesce(party_name, '')"),
-			foldExpr("coalesce(sa.organ, '')"),
-			foldExpr("coalesce(sa.registry, '')"),
-			foldExpr("coalesce(sa.sanction_type, '')"),
-			foldExpr("coalesce(sa.process_ref, '')"),
-		))
+		// Compare against precomputed folded fields, not a query-time fold of five
+		// columns over every one of 64k+ aggregated rows (that was a 9.4s search).
+		// party_search is the party's folded name; sa.search_text already folds
+		// registry/organ/sanction_type/process_ref together (see sanctions_writer).
+		filters = append(filters, `(coalesce(party_search, '') CONTAINS $q OR coalesce(sa.search_text, '') CONTAINS $q)`)
 		params["q"] = foldQuery(q)
 	}
 	if len(filters) > 0 {
@@ -105,6 +103,7 @@ OPTIONAL MATCH (party)-[:SANCTIONED_IN]->(sa)
 WITH sa,
      head(collect(party.id)) AS party_id,
      head(collect(party.name)) AS party_name,
+     head(collect(party.search_name)) AS party_search,
      head(collect(coalesce(party.cnpj, party.cpf))) AS party_document,
      head(collect(labels(party)[0])) AS party_type
 %s

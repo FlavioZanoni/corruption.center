@@ -90,14 +90,22 @@ func (db *DB) QueryScandals(ctx context.Context, sort string, page, pageSize int
 	// cases, so count both. count(DISTINCT p) over one pattern is what de-duplicates
 	// someone who is both; collecting the two paths separately and adding them would
 	// count that person twice.
+	// Drive the politician count FROM the scandal, not from a bare
+	// `OPTIONAL MATCH (p:Politician)` — that scanned all politicians once per
+	// scandal (a ScanAll the relationship makes unnecessary). Traversing inward
+	// from s only touches politicians actually connected to it. The two paths are
+	// unioned by node identity so someone who is both directly involved and a
+	// defendant is counted once, matching the old count(DISTINCT p).
 	res, err := session.Run(ctx, fmt.Sprintf(`
     MATCH (s:Scandal)
     OPTIONAL MATCH (lp:LegalProceeding)-[:INVESTIGATES]->(s)
     WITH s, count(DISTINCT lp) AS proceeding_count
-    OPTIONAL MATCH (p:Politician)
-    WHERE (p)-[:INVOLVED_IN]->(s)
-       OR (p)-[:DEFENDANT_IN]->(:LegalProceeding)-[:INVESTIGATES]->(s)
-    WITH s, proceeding_count, count(DISTINCT p) AS politician_count
+    OPTIONAL MATCH (s)<-[:INVOLVED_IN]-(p:Politician)
+    WITH s, proceeding_count, collect(DISTINCT p) AS direct
+    OPTIONAL MATCH (s)<-[:INVESTIGATES]-(:LegalProceeding)<-[:DEFENDANT_IN]-(p2:Politician)
+    WITH s, proceeding_count, direct, collect(DISTINCT p2) AS via_cases
+    WITH s, proceeding_count,
+         size(direct + [x IN via_cases WHERE NOT x IN direct]) AS politician_count
     RETURN s, politician_count, proceeding_count
     ORDER BY %s
     SKIP $skip LIMIT $limit
