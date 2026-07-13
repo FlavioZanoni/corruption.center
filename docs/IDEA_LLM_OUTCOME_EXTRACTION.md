@@ -114,12 +114,54 @@ interest overrides privacy — and we already ingest most of them:
 The CNCIAI is the closest thing Brazil has to the API being asked about:
 improbidade administrativa is corruption's civil twin (same conduct, civil
 liability), and the registry exists precisely so the public can check names.
-Two zero-cost routes to it:
 
-1. **LAI request** (Lei de Acesso à Informação) to CNJ asking for a bulk
-   export — official, free, and they are obliged to answer in 20 days.
-2. **Manual consultation** for high-profile names via the portal, recorded
-   through the existing backoffice outcome flow with the portal link as the
-   evidence URL.
+**There is an official API, and we are exactly who it is for.** Portaria 94
+(CNJ/STF) allows public bodies *and interested institutions, including news
+media*, to connect to the registry via API so it can be "associated with other
+services and products offered to the public, without the need for individual
+consultations". So the action is **request API access under Portaria 94** — not
+a LAI request, and not scraping. Scraping would be slower, more fragile, and
+would trade a credential CNJ granted us for something we took.
 
-Scraping the portal is ruled out by this project's standing sourcing policy.
+What it yields: named individuals and companies convicted under Lei 8.429/92,
+plus those made ineligible under the Ficha Limpa (LC 135), searchable by
+**CPF/CNPJ**, name, or case number, with the condemning court. The CPF/CNPJ is
+the prize — it is a DOCUMENT, so these records fuse straight onto the sanctions
+island instead of stranding in the name-only DJEN island. "A document
+identifies. A name only leads."
+
+Publishing it (lawyer should still sign off, but the footing is strong): the
+registry is public by design, its purpose is public consultation, and Portaria
+94 explicitly contemplates redistribution by media. Two conditions treat as
+non-negotiable: **stay current** (an improbidade conviction can be overturned;
+a stale "condenado" badge is precisely the defamation this project exists to
+avoid — re-sync, and let removals remove), and **show source + date on every
+record**. The provenance model and backoffice already do both.
+
+Court front-ends remain off-limits: that is where LGPD-protected criminal data
+lives. An official anti-corruption registry that publishes an API for
+redistribution is a different animal entirely.
+
+## Appendix 2: nobody else has this API either
+
+No country publishes a browsable "who is a convicted criminal" database. The
+reason is identical everywhere: criminal records are issued as per-person
+certificates so convictions can expire, be sealed, and be reversed.
+
+| | Criminal convictions by name | Corruption / integrity registry |
+|---|---|---|
+| **Brazil** | none (LGPD + resocialização; DataJud strips names on purpose) | **excellent** — CGU, TCU, TSE, CNJ improbidade; all APIs |
+| **US** | federal dockets carry names (PACER; free via CourtListener/RECAP) but per-docket, no "convicted persons" endpoint; states are a patchwork | good — SAM.gov exclusions, OFAC, FARA |
+| **UK** | none; DBS checks are consent-based, per-person | good — Companies House disqualified directors, free API |
+| **Canada** | none; CPIC is police-only; court records per-province | weaker — federal Ineligibility & Suspension list |
+
+(Sketch from knowledge, not researched — verify before relying on it.)
+
+The US is the only one that yields named criminal defendants at scale, and only
+as a byproduct of open dockets rather than by design. Everywhere else the shape
+is Brazil's: **convictions are private, corruption sanctions are public.**
+
+Which validates the architecture: the spine of a corruption graph is the
+sanctions and integrity registries, not criminal convictions. On that axis
+Brazil is ahead of the UK and Canada. The thing that felt like a Brazilian
+failure is a thing nobody has.
