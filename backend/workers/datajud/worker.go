@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"corruption-center/db/memgraph"
@@ -29,6 +30,16 @@ type Options struct {
 	PollLimit       int
 	EnableWrites    bool
 }
+
+// caseFetchers is how many DataJud lookups are in flight at once. The API answers
+// in 7-32 seconds, so a serial poller idles on the network almost all the time;
+// six in flight brings a full pass over 8,000 cases from ~89 hours to a few. The
+// client's rate limiter is global and still caps the run at 60 req/min.
+const caseFetchers = 6
+
+// progressEvery: a run this long must say where it is. See the DJEN worker, which
+// was a black box for ten hours for exactly this reason.
+const progressEvery = 100
 
 type RunStats struct {
 	CasesLoaded       int
@@ -108,10 +119,61 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 		limit = len(cases)
 	}
 
-	for i := 0; i < limit; i++ {
-		c := cases[i]
-		src, err := w.client.SearchByCaseNumber(ctx, c.TribunalEndpoint, c.CaseNumber)
-		if err != nil {
+	// Fetch concurrently, write serially.
+	//
+	// DataJud is SLOW: a single lookup measured 7s on api_publica_trf4, 8s on
+	// api_publica_tjes and 32s on api_publica_tjba. Polled one at a time, the run
+	// managed about 1.5 cases a minute — 8,000 cases would have taken 89 hours, and
+	// the 60 req/min self-limit never even came into play, because the API's own
+	// latency was the ceiling, not our politeness.
+	//
+	// So the fetches overlap and the WRITES stay on this goroutine: no locks, no
+	// racing MERGEs, and stats that add up. The client's limiter is global, so the
+	// self-imposed 60 req/min cap still holds no matter how many fetchers there are.
+	type poll struct {
+		c   psql.WatcherCase
+		src *CaseSource
+		err error
+	}
+
+	work := make(chan psql.WatcherCase)
+	polls := make(chan poll, caseFetchers)
+
+	go func() {
+		defer close(work)
+		for i := 0; i < limit; i++ {
+			select {
+			case work <- cases[i]:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer close(polls)
+		var wg sync.WaitGroup
+		for i := 0; i < caseFetchers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for c := range work {
+					src, err := w.client.SearchByCaseNumber(ctx, c.TribunalEndpoint, c.CaseNumber)
+					select {
+					case polls <- poll{c: c, src: src, err: err}:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}()
+		}
+		wg.Wait()
+	}()
+
+	for p := range polls {
+		c, src := p.c, p.src
+
+		if p.err != nil {
 			// One unreachable tribunal used to end the whole run. A pass over 701
 			// cases died on a single timeout against api_publica_tjap and threw away
 			// every case it had already polled — the same failure that cost us a CGU
@@ -120,14 +182,21 @@ func (w *Worker) Run(ctx context.Context, opts Options) (*RunStats, error) {
 			//
 			// A cancelled context is different: that is us stopping, and it should.
 			if ctx.Err() != nil {
-				return nil, err
+				return nil, p.err
 			}
 			stats.FetchErrors++
 			slog.Warn("datajud: case lookup failed, skipping",
-				"case", c.CaseNumber, "endpoint", c.TribunalEndpoint, "err", err)
+				"case", c.CaseNumber, "endpoint", c.TribunalEndpoint, "err", p.err)
 			continue
 		}
 		stats.CasesPolled++
+
+		if stats.CasesPolled%progressEvery == 0 {
+			slog.Info("datajud: progress",
+				"polled", stats.CasesPolled, "of", limit,
+				"updated", stats.CasesUpdated, "errors", stats.FetchErrors)
+		}
+
 		if src == nil {
 			stats.CasesNotFound++
 			// Read-only runs never mutate watcher_tracking (not even
