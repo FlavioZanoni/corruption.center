@@ -217,6 +217,22 @@ func (w *Worker) sweep(ctx context.Context, registry string, stats *Stats) {
 			"registry", registry, "max_pages", w.opts.MaxPages)
 		return
 	}
+	// A registry that aborted mid-fetch returns nil (it saves its cursor and
+	// carries on), so its records are only partly re-seen. Sweeping it would read
+	// that half-fetch as the source having withdrawn the other half. The 5%
+	// graph-side ceiling would very likely catch it, but this is the correctness
+	// gate; the ceiling is defense in depth behind it.
+	// FailedRegistries stores the lowercase CGU group ("ceis@p15"); sweep() is
+	// called with the uppercase registry ("CEIS"). Compare case-folded.
+	prefix := strings.ToLower(registry) + "@"
+	for _, f := range stats.FailedRegistries {
+		lf := strings.ToLower(f)
+		if strings.HasPrefix(lf, prefix) || lf == strings.ToLower(registry) {
+			slog.Warn("sanctions: not sweeping, this registry fetch failed partway",
+				"registry", registry, "failure", f)
+			return
+		}
+	}
 	res, err := w.mg.SweepRetractedSanctions(ctx, registry, stats.RunID, memgraph.DefaultRetractionGuard)
 	if err != nil {
 		// A failed sweep leaves everything published. That is the safe direction:
