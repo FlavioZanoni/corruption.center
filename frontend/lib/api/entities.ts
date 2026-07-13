@@ -93,6 +93,9 @@ export interface PersonRecord {
   provenance_source?: string
   provenance_link?: string
   provenance_tribunal?: string
+  // A name-only node (no full CPF): its records may belong to more than one real
+  // person of the same name. The profile must not present them as one history.
+  ambiguous?: boolean
 }
 
 export interface PersonDetail {

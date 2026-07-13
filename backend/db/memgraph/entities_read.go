@@ -39,6 +39,10 @@ func (db *DB) QueryPerson(ctx context.Context, id string) (*models.PersonProfile
 			ProvenanceLink:        strProp(props, "provenance_link"),
 			ProvenanceTribunal:    strProp(props, "provenance_tribunal"),
 			ProvenanceComunicaoID: strProp(props, "provenance_comunicacao_id"),
+			// No full CPF ⇒ the node is keyed by name, so its records may belong to
+			// more than one real person. Politician/sanction nodes carry a full CPF
+			// and are not flagged.
+			Ambiguous: strProp(props, "cpf") == "",
 		}
 	}
 

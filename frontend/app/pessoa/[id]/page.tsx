@@ -116,7 +116,11 @@ function personJsonLd(
     name: p.name,
     identifier: p.id,
     url: siteUrl(`/pessoa/${p.id}`),
-    ...(subjectOf.length ? { subjectOf } : {}),
+    // Only assert subjectOf (this person is the subject of these records) when the
+    // node is a specific, document-identified person. A name-only node may merge
+    // records of several people who share the name; emitting them here as one
+    // schema.org Person is machine-readable defamation of whichever one is innocent.
+    ...(!p.ambiguous && subjectOf.length ? { subjectOf } : {}),
   }
 }
 
@@ -180,6 +184,25 @@ export default async function PessoaPage({ params }: Props) {
           </strong>
           .
         </p>
+
+        {/* ── Homonym warning ── */}
+        {/* A node with no CPF is keyed by name alone, so records below may belong
+            to different people who share it. Say so before the reader reads the
+            list as one person's history. */}
+        {p.ambiguous && (
+          <p className="mt-4 rounded-sm border border-sky-600/40 bg-sky-500/5 px-4 py-3 text-xs leading-relaxed text-text-muted">
+            <strong className="block text-text">
+              Nome comum — pode corresponder a mais de uma pessoa.
+            </strong>
+            Este registro é identificado apenas pelo nome (sem CPF), então os
+            processos e sanções listados abaixo{" "}
+            <strong className="text-text">
+              podem se referir a pessoas diferentes
+            </strong>{" "}
+            com o mesmo nome. Cada item deve ser lido individualmente, a partir da
+            sua fonte oficial, e não como o histórico de uma única pessoa.
+          </p>
+        )}
 
         {/* ── LEGAL SENSITIVITY DISCLAIMER ── */}
         <p className="mt-4 rounded-sm border border-yellow-600/30 bg-yellow-500/5 px-4 py-3 text-xs leading-relaxed text-text-muted">
