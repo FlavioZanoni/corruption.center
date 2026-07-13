@@ -140,7 +140,9 @@ services:
       ENABLE_WRITES: "true"
       VERIFY_TPU: "true"
       STRICT_VERIFY: "false"
-      DATAJUD_POLL_LIMIT: "50"
+      # 0 = every case that needs polling. It was hardcoded to 50, so a full pass
+      # over 8,080 cases would have taken 160 runs.
+      DATAJUD_POLL_LIMIT: ${DATAJUD_POLL_LIMIT:-0}
       DATAJUD_PROBE_CASE: ""
       DATAJUD_PROBE_TRIBUNAL: ""
     depends_on:

@@ -22,12 +22,24 @@ func main() {
 		verifyTPU     = flag.Bool("verify-tpu", true, "Verify movement codes against TPU public table")
 		strictVerify  = flag.Bool("strict-verify", false, "Fail fast when verification/probe checks are incomplete")
 		pollLimit     = flag.Int("poll-limit", 0, "Max watcher cases to poll (0 = all)")
-		enableWrites  = flag.Bool("enable-writes", false, "Enable case-level graph writes (proceeding upsert + phase/has_conviction/status state machine)")
+		// Defaults from the environment, so a run started WITHOUT deploy/datajud-watcher.sh
+		// behaves the same as one started with it. It did not: the flag defaulted to
+		// false and nothing read ENABLE_WRITES, so `go run ./workers/datajud/cmd`
+		// happily queried DataJud eight thousand times, wrote nothing, and reported
+		// success. The env var existed, was set to "true" in compose, and was ignored.
+		enableWrites = flag.Bool("enable-writes", envBool("ENABLE_WRITES", false),
+			"Enable case-level graph writes (proceeding upsert + phase/has_conviction/status state machine). Defaults to $ENABLE_WRITES.")
 	)
 	flag.Parse()
 
 	ctx := context.Background()
 	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	// A worker that reads an API for hours and writes nothing looks exactly like a
+	// worker that is working. Say it out loud.
+	if !*enableWrites {
+		log.Warn("datajud: WRITES ARE DISABLED — this run will poll DataJud and change nothing. Pass -enable-writes or set ENABLE_WRITES=true.")
+	}
 	pg, err := psql.New(ctx, mustEnv("DATABASE_URL"), log)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "connect postgres: %v\n", err)
@@ -78,4 +90,17 @@ func mustEnv(key string) string {
 		os.Exit(2)
 	}
 	return v
+}
+
+// envBool reads a boolean flag default from the environment. Accepts the spellings
+// a compose file or a shell actually produces.
+func envBool(key string, fallback bool) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }
