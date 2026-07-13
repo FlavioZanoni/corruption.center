@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
@@ -19,6 +20,10 @@ type SanctionUpsert struct {
 	DateEnd      string // yyyy-mm-dd, or "" when unknown
 	ProcessRef   string
 	SourceURL    string
+	// RunID identifies the sync run that saw this record. Empty means "do not
+	// stamp" (a caller that is not doing a full sweepable sync), which leaves any
+	// existing stamp intact rather than making the record look unseen.
+	RunID string
 }
 
 // PoliticianMatch is a Politician node candidate returned by masked-CPF or
@@ -37,6 +42,12 @@ func SanctionNodeID(registry, entryID string) string {
 
 // UpsertSanction merges a Sanction node by its deterministic id. source_url is a
 // hard requirement (legal compliance): every node must deep-link the record.
+//
+// RunID stamps WHICH sync saw this record. That stamp is what later lets the
+// retraction sweep (retraction.go) tell "still sanctioned" from "the source
+// stopped saying so" — the difference between a fact and a stale accusation.
+// An upsert also CLEARS any retraction: a record that came back is published
+// again, because retraction must not be a one-way door.
 func (db *DB) UpsertSanction(ctx context.Context, s SanctionUpsert) (string, error) {
 	if strings.TrimSpace(s.SourceURL) == "" {
 		return "", fmt.Errorf("memgraph: sanction %s:%s missing source_url", s.Registry, s.EntryID)
@@ -46,16 +57,24 @@ func (db *DB) UpsertSanction(ctx context.Context, s SanctionUpsert) (string, err
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
+	// MERGE on the IDENTITY label, not on :Sanction. A retracted sanction has had
+	// :Sanction removed; merging on :Sanction would fail to find it and create a
+	// duplicate node with the same id. SET s:Sanction republishes anything the
+	// source has started reporting again — retraction is not a one-way door.
 	res, err := session.Run(ctx, `
-MERGE (s:Sanction {id: $id})
+MERGE (s:SanctionRecord {id: $id})
 SET
+  s:Sanction,
   s.registry = $registry,
   s.sanction_type = $sanction_type,
   s.organ = $organ,
   s.date_start = $date_start,
   s.date_end = $date_end,
   s.process_ref = $process_ref,
-  s.source_url = $source_url
+  s.source_url = $source_url,
+  s.last_seen_run = CASE WHEN $run_id = '' THEN s.last_seen_run ELSE $run_id END,
+  s.last_seen_at = CASE WHEN $run_id = '' THEN s.last_seen_at ELSE $at END
+REMOVE s:RetractedSanction, s.retracted_at, s.retraction_reason
 RETURN s.id AS id
 `, map[string]any{
 		"id":            id,
@@ -66,6 +85,8 @@ RETURN s.id AS id
 		"date_end":      nilIfEmpty(s.DateEnd),
 		"process_ref":   s.ProcessRef,
 		"source_url":    s.SourceURL,
+		"run_id":        s.RunID,
+		"at":            time.Now().UTC().Format(time.RFC3339),
 	})
 	if err != nil {
 		return "", fmt.Errorf("memgraph: upsert sanction: %w", err)

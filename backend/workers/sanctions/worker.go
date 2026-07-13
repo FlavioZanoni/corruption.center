@@ -57,17 +57,28 @@ type Options struct {
 	CGUBaseURL string   // override for tests
 	TCUBaseURL string   // override for tests
 	MaxPages   int      // per-registry CGU page cap (0 = until empty)
+
+	// Sweep enables the retraction sweep after each registry completes cleanly:
+	// anything the run did not see gets unpublished. OFF by default, and it must
+	// stay that way — a partial run (MaxPages set, a registry filter, a dry run)
+	// sees only part of the source, and its silence must never be mistaken for
+	// the state having withdrawn a sanction. Only a FULL sync may sweep.
+	Sweep bool
 }
 
 // Stats summarizes a run.
 type Stats struct {
-	RecordsProcessed  int `json:"records_processed"`
-	SanctionsUpserted int `json:"sanctions_upserted"`
-	OrgsCreated       int `json:"orgs_created"`
-	PersonsCreated    int `json:"persons_created"`
-	EdgesCreated      int `json:"edges_created"`
-	PendingReviews    int `json:"pending_reviews"`
-	MaskedCPFMatches  int `json:"masked_cpf_matches"`
+	// RunID stamps every record this run touches, so the retraction sweep can
+	// tell "the source still says this" from "the source stopped saying it".
+	RunID             string                 `json:"run_id"`
+	Sweeps            []memgraph.SweepResult `json:"sweeps,omitempty"`
+	RecordsProcessed  int                    `json:"records_processed"`
+	SanctionsUpserted int                    `json:"sanctions_upserted"`
+	OrgsCreated       int                    `json:"orgs_created"`
+	PersonsCreated    int                    `json:"persons_created"`
+	EdgesCreated      int                    `json:"edges_created"`
+	PendingReviews    int                    `json:"pending_reviews"`
+	MaskedCPFMatches  int                    `json:"masked_cpf_matches"`
 	// AutoLinked counts edges written with no human review because the evidence
 	// reached document grade (matching.AutoLinkThreshold).
 	AutoLinked int `json:"auto_linked"`
@@ -137,7 +148,7 @@ func selectedRegistries(requested []string) []string {
 
 // Run executes the selected registries and returns aggregate stats.
 func (w *Worker) Run(ctx context.Context) (*Stats, error) {
-	stats := &Stats{PerRegistry: map[string]int{}}
+	stats := &Stats{PerRegistry: map[string]int{}, RunID: newRunID()}
 
 	if !w.opts.DryRun && w.mg == nil {
 		return nil, fmt.Errorf("sanctions: memgraph writer is required unless --dry-run")
@@ -161,9 +172,16 @@ func (w *Worker) Run(ctx context.Context) (*Stats, error) {
 			if err := w.runCGURegistry(ctx, group, stats); err != nil {
 				return stats, fmt.Errorf("sanctions: %s: %w", group, err)
 			}
+			w.sweep(ctx, strings.ToUpper(group), stats)
 		case "tcu":
 			if err := w.runTCU(ctx, stats); err != nil {
 				return stats, fmt.Errorf("sanctions: tcu: %w", err)
+			}
+			// TCU writes several registries (TCU_IRREGULAR, TCU_INABILITADO,
+			// TCU_INIDONEO); each is swept on its own so one short list cannot
+			// retract another.
+			for _, r := range tcuRegistries {
+				w.sweep(ctx, r, stats)
 			}
 		default:
 			return stats, fmt.Errorf("sanctions: unknown registry %q", group)
@@ -171,6 +189,44 @@ func (w *Worker) Run(ctx context.Context) (*Stats, error) {
 	}
 
 	return stats, nil
+}
+
+// tcuRegistries are the registry names the TCU importer writes.
+var tcuRegistries = []string{"TCU_IRREGULAR", "TCU_INABILITADO", "TCU_INIDONEO"}
+
+// newRunID is a monotonic, human-readable stamp. Uniqueness per run is all that
+// is required — it is compared for equality, never parsed.
+func newRunID() string {
+	return "run_" + time.Now().UTC().Format("20060102T150405.000000000")
+}
+
+// sweep unpublishes the records of one registry that this run did not see.
+//
+// It refuses in every circumstance where an absence might be OUR fault rather
+// than the state's: a dry run, a partial fetch (MaxPages), or the sweep not
+// being explicitly asked for. The graph library adds its own guards on top (a
+// ceiling on how much one sweep may unpublish). Retraction is the only bulk
+// unpublish in this system, and it fires on missing data — the same shape as a
+// truncated response.
+func (w *Worker) sweep(ctx context.Context, registry string, stats *Stats) {
+	if !w.opts.Sweep || w.opts.DryRun || w.mg == nil {
+		return
+	}
+	if w.opts.MaxPages > 0 {
+		slog.Warn("sanctions: not sweeping, this was a partial fetch",
+			"registry", registry, "max_pages", w.opts.MaxPages)
+		return
+	}
+	res, err := w.mg.SweepRetractedSanctions(ctx, registry, stats.RunID, memgraph.DefaultRetractionGuard)
+	if err != nil {
+		// A failed sweep leaves everything published. That is the safe direction:
+		// publishing a stale record is bad, but silently unpublishing thousands of
+		// real ones on a broken sweep is worse and much harder to notice.
+		slog.Error("sanctions: retraction sweep failed, leaving records published",
+			"registry", registry, "err", err)
+		return
+	}
+	stats.Sweeps = append(stats.Sweeps, res)
 }
 
 // planRegistries decides which of the selected registries to run given whether a
@@ -235,6 +291,7 @@ func (w *Worker) apply(ctx context.Context, rec SanctionRecord, stats *Stats) er
 		DateEnd:      rec.DateEnd,
 		ProcessRef:   rec.ProcessRef,
 		SourceURL:    rec.SourceURL,
+		RunID:        stats.RunID,
 	})
 	if err != nil {
 		return err

@@ -21,6 +21,7 @@ func main() {
 		cguBase    = flag.String("cgu-base-url", "", "Override CGU API base URL")
 		tcuBase    = flag.String("tcu-base-url", "", "Override TCU CSV base URL")
 		maxPages   = flag.Int("max-pages", 0, "Per-registry CGU page cap (0 = until empty)")
+		sweep      = flag.Bool("sweep", false, "After a FULL sync, unpublish records the source no longer lists (retraction). Refused on any partial run.")
 	)
 	flag.Parse()
 
@@ -35,6 +36,7 @@ func main() {
 		CGUBaseURL: *cguBase,
 		TCUBaseURL: *tcuBase,
 		MaxPages:   *maxPages,
+		Sweep:      *sweep,
 	}
 
 	pg, err := psql.New(ctx, mustEnv("DATABASE_URL"), log)
