@@ -44,5 +44,6 @@ type Repository interface {
 
 	// purge tombstones (LGPD anti-resurrection); see tombstone.go
 	CreatePurgeTombstones(ctx context.Context, keys []string, nodeID string, removalID string) error
+	DeletePurgedSubjectName(ctx context.Context, name string) (int, error)
 	IsSubjectPurged(ctx context.Context, keys ...string) (bool, error)
 }

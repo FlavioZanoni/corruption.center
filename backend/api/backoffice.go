@@ -749,6 +749,22 @@ func (h *backofficeHandler) removalResolve(c *gin.Context) {
 				return
 			}
 		}
+
+		// Complete the erasure: PurgePersonNode scrubbed the graph, but the
+		// subject's NAME still sat in the review/audit substrate (pending_review
+		// payloads, DJEN party snapshots, pending aliases). LGPD art. 18 reaches
+		// those too. Record how many rows were scrubbed in the audit trail.
+		if prov != nil && strings.TrimSpace(prov.Name) != "" {
+			removed, err := h.server.psql.DeletePurgedSubjectName(c.Request.Context(), prov.Name)
+			if err != nil {
+				h.renderRemovals(c, "", "node purged and tombstoned, but failed to scrub the name from the review tables: "+err.Error())
+				return
+			}
+			if removed > 0 {
+				_ = h.server.psql.LogAudit(c.Request.Context(), user, psql.AuditActionDelete, "review_substrate", req.TargetID,
+					map[string]any{"name_rows_deleted": removed})
+			}
+		}
 		if resolution == "" {
 			resolution = "purged targeted node and all edges from the graph"
 		}

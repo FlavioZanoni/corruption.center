@@ -29,6 +29,7 @@ type stubPsql struct {
 	resolveCalls  []resolveCall
 	auditActions  []psql.AuditAction
 	tombstoneKeys [][]string
+	deletedNames  []string
 	// review approval bookkeeping
 	review        psql.PendingReviewItem
 	statusUpdates []string
@@ -50,6 +51,11 @@ func (s *stubPsql) UpdatePendingReviewStatus(_ context.Context, _ string, status
 func (s *stubPsql) CreatePurgeTombstones(_ context.Context, keys []string, _ string, _ string) error {
 	s.tombstoneKeys = append(s.tombstoneKeys, keys)
 	return nil
+}
+
+func (s *stubPsql) DeletePurgedSubjectName(_ context.Context, name string) (int, error) {
+	s.deletedNames = append(s.deletedNames, name)
+	return 0, nil
 }
 
 // ListPendingReviews is called when a failed approval re-renders the queue.
