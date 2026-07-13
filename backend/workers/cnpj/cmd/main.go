@@ -45,11 +45,12 @@ func main() {
 	defer mg.Close(ctx)
 
 	opts := cnpj.Options{
-		BaseURL:    *baseURL,
-		RatePerMin: ratePerMin(),
-		Limit:      *limit,
-		DryRun:     *dryRun,
-		SingleCNPJ: *single,
+		BaseURL:      *baseURL,
+		RatePerMin:   ratePerMin(),
+		Limit:        *limit,
+		DryRun:       *dryRun,
+		SingleCNPJ:   *single,
+		ReenrichDays: envInt("CNPJ_REENRICH_DAYS", 90),
 	}
 
 	w := cnpj.NewWorker(pg, mg, opts)
@@ -75,6 +76,20 @@ func ratePerMin() int {
 	n, err := strconv.Atoi(v)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid CNPJ_RATE_PER_MIN %q: %v\n", v, err)
+		os.Exit(2)
+	}
+	return n
+}
+
+// envInt reads an integer environment variable with a fallback default.
+func envInt(key string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid %s %q: %v\n", key, v, err)
 		os.Exit(2)
 	}
 	return n

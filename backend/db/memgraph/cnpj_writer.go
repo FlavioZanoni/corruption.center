@@ -29,19 +29,32 @@ type OrganizationEnrichment struct {
 }
 
 // ListOrganizationsNeedingEnrichment returns Organization nodes that carry a
-// 14-digit CNPJ but have not been enriched yet (enriched flag missing/false: // which also covers nodes still missing their razão social). Bounded by limit
-// (limit <= 0 returns all).
-func (db *DB) ListOrganizationsNeedingEnrichment(ctx context.Context, limit int) ([]OrgToEnrich, error) {
+// 14-digit CNPJ and match any of: never enriched (enriched flag missing/false),
+// missing enriched_at (backward compat for pre-timestamp orgs), or stale
+// (enriched_at before the cutoff). cutoff should be an RFC3339 UTC timestamp
+// string. Never-enriched/never-stamped orgs are returned first, then stale ones.
+// Bounded by limit (limit <= 0 returns all).
+func (db *DB) ListOrganizationsNeedingEnrichment(ctx context.Context, limit int, cutoff string) ([]OrgToEnrich, error) {
 	session := db.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
 	query := `
 MATCH (o:Organization)
 WHERE o.cnpj IS NOT NULL AND size(o.cnpj) = 14
-  AND (o.enriched IS NULL OR o.enriched = false)
+  AND (
+    o.enriched IS NULL OR o.enriched = false
+    OR o.enriched_at IS NULL
+    OR o.enriched_at < $cutoff
+  )
+ORDER BY
+  CASE WHEN o.enriched IS NULL OR o.enriched = false THEN 0
+       WHEN o.enriched_at IS NULL THEN 1
+       ELSE 2
+  END,
+  o.enriched_at ASC
 RETURN o.id AS id, o.cnpj AS cnpj
 `
-	params := map[string]any{}
+	params := map[string]any{"cutoff": cutoff}
 	if limit > 0 {
 		query += "LIMIT $limit"
 		params["limit"] = limit
@@ -69,9 +82,10 @@ RETURN o.id AS id, o.cnpj AS cnpj
 }
 
 // UpdateOrganizationEnrichment merges an Organization by CNPJ and writes the
-// enriched fields, setting enriched=true so the node is not re-processed. Merging
-// by cnpj (not id) reconciles nodes seeded by other workers with the same CNPJ.
-func (db *DB) UpdateOrganizationEnrichment(ctx context.Context, e OrganizationEnrichment) (string, error) {
+// enriched fields, setting enriched=true and enriched_at to the provided timestamp
+// so the node is not re-processed. Merging by cnpj (not id) reconciles nodes seeded
+// by other workers with the same CNPJ. enrichedAt should be an RFC3339 UTC timestamp.
+func (db *DB) UpdateOrganizationEnrichment(ctx context.Context, e OrganizationEnrichment, enrichedAt string) (string, error) {
 	digits := digitsOnly(e.CNPJ)
 	if len(digits) != 14 {
 		return "", fmt.Errorf("memgraph: invalid cnpj %q", e.CNPJ)
@@ -94,7 +108,8 @@ SET
   o.share_capital_brl = $share_capital_brl,
   o.main_activity = $main_activity,
   o.source_url = $source_url,
-  o.enriched = true
+  o.enriched = true,
+  o.enriched_at = $enriched_at
 RETURN o.id AS id
 `, map[string]any{
 		"id":                "org_" + digits,
@@ -107,6 +122,7 @@ RETURN o.id AS id
 		"share_capital_brl": e.ShareCapitalBRL,
 		"main_activity":     e.MainActivity,
 		"source_url":        e.SourceURL,
+		"enriched_at":       enrichedAt,
 	})
 	if err != nil {
 		return "", fmt.Errorf("memgraph: update organization enrichment: %w", err)

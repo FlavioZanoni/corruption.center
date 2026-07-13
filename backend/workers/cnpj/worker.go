@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"corruption-center/db/memgraph"
 	"corruption-center/db/psql"
@@ -38,11 +39,12 @@ type Worker struct {
 }
 
 type Options struct {
-	BaseURL    string
-	RatePerMin int
-	Limit      int    // max root orgs to enrich (0 = all needing enrichment)
-	DryRun     bool   // fetch + classify but write nothing
-	SingleCNPJ string // enrich just this CNPJ (testing); bypasses the queue query
+	BaseURL      string
+	RatePerMin   int
+	Limit        int    // max root orgs to enrich (0 = all needing enrichment)
+	DryRun       bool   // fetch + classify but write nothing
+	SingleCNPJ   string // enrich just this CNPJ (testing); bypasses the queue query
+	ReenrichDays int    // staleness threshold in days (0 or negative disables re-enrichment)
 }
 
 type RunStats struct {
@@ -154,7 +156,15 @@ func (w *Worker) rootJobs(ctx context.Context, opts Options) ([]job, error) {
 		return []job{{orgID: orgID, cnpj: digits, depth: 0}}, nil
 	}
 
-	orgs, err := w.mg.ListOrganizationsNeedingEnrichment(ctx, opts.Limit)
+	// Staleness cutoff: an org whose enriched_at is older than this is re-fetched.
+	// ReenrichDays <= 0 disables the time-based pass — an empty cutoff is smaller
+	// than every RFC3339 timestamp, so `enriched_at < cutoff` never matches and
+	// only never-enriched or never-stamped orgs are picked up.
+	cutoff := ""
+	if opts.ReenrichDays > 0 {
+		cutoff = time.Now().UTC().AddDate(0, 0, -opts.ReenrichDays).Format(time.RFC3339)
+	}
+	orgs, err := w.mg.ListOrganizationsNeedingEnrichment(ctx, opts.Limit, cutoff)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +193,8 @@ func (w *Worker) enrichOne(ctx context.Context, opts Options, j job, stats *RunS
 
 	orgID := j.orgID
 	if !opts.DryRun {
-		id, err := w.mg.UpdateOrganizationEnrichment(ctx, enrichment)
+		enrichedAt := time.Now().UTC().Format(time.RFC3339)
+		id, err := w.mg.UpdateOrganizationEnrichment(ctx, enrichment, enrichedAt)
 		if err != nil {
 			return nil, err
 		}
