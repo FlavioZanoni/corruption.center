@@ -3,16 +3,16 @@ package handlers
 import (
 	"net/http"
 
-	"corruption-center/api/services"
+	"corruption-center/db/memgraph"
 	"github.com/gin-gonic/gin"
 )
 
 type SearchHandler struct {
-	service services.SearchService
+	repo memgraph.Repository
 }
 
-func NewSearchHandler(service services.SearchService) *SearchHandler {
-	return &SearchHandler{service: service}
+func NewSearchHandler(repo memgraph.Repository) *SearchHandler {
+	return &SearchHandler{repo: repo}
 }
 
 // Search godoc
@@ -35,7 +35,7 @@ func (h *SearchHandler) Search(c *gin.Context) {
 
 	nodeType := c.Query("type")
 
-	results, err := h.service.Search(c.Request.Context(), q, nodeType)
+	results, err := h.repo.QuerySearch(c.Request.Context(), q, nodeType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"corruption-center/api/services"
+	"corruption-center/db/memgraph"
 )
 
 type Handlers struct {
@@ -16,16 +16,16 @@ type Handlers struct {
 	Proceeding *ProceedingHandler
 }
 
-func NewHandlers(graph services.GraphService, search services.SearchService) *Handlers {
+func NewHandlers(repo memgraph.Repository) *Handlers {
 	return &Handlers{
 		Health:     NewHealthHandler(),
-		Graph:      NewGraphHandler(graph),
-		Search:     NewSearchHandler(search),
-		Timeline:   NewTimelineHandler(graph),
-		Politician: NewPoliticianHandler(graph),
-		Scandal:    NewScandalHandler(graph),
-		Sanction:   NewSanctionHandler(graph),
-		Entity:     NewEntityHandler(graph),
-		Proceeding: NewProceedingHandler(graph),
+		Graph:      NewGraphHandler(repo),
+		Search:     NewSearchHandler(repo),
+		Timeline:   NewTimelineHandler(repo),
+		Politician: NewPoliticianHandler(repo),
+		Scandal:    NewScandalHandler(repo),
+		Sanction:   NewSanctionHandler(repo),
+		Entity:     NewEntityHandler(repo),
+		Proceeding: NewProceedingHandler(repo),
 	}
 }

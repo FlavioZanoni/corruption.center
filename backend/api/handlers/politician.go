@@ -5,16 +5,16 @@ import (
 	"strconv"
 
 	"corruption-center/api/models"
-	"corruption-center/api/services"
+	"corruption-center/db/memgraph"
 	"github.com/gin-gonic/gin"
 )
 
 type PoliticianHandler struct {
-	service services.GraphService
+	repo memgraph.Repository
 }
 
-func NewPoliticianHandler(service services.GraphService) *PoliticianHandler {
-	return &PoliticianHandler{service: service}
+func NewPoliticianHandler(repo memgraph.Repository) *PoliticianHandler {
+	return &PoliticianHandler{repo: repo}
 }
 
 // GetPolitician godoc
@@ -30,7 +30,7 @@ func NewPoliticianHandler(service services.GraphService) *PoliticianHandler {
 func (h *PoliticianHandler) GetPolitician(c *gin.Context) {
 	id := c.Param("id")
 
-	politician, err := h.service.GetPolitician(c.Request.Context(), id)
+	politician, err := h.repo.QueryPolitician(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -40,7 +40,7 @@ func (h *PoliticianHandler) GetPolitician(c *gin.Context) {
 		return
 	}
 
-	connections, err := h.service.GetPoliticianGraph(c.Request.Context(), id)
+	connections, err := h.repo.QueryPoliticianGraph(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -79,7 +79,7 @@ func (h *PoliticianHandler) ListPoliticians(c *gin.Context) {
 	page, _ := strconv.Atoi(c.Query("page"))
 	pageSize, _ := strconv.Atoi(c.Query("page_size"))
 
-	list, err := h.service.ListPoliticians(c.Request.Context(), filter, party, uf, sort, page, pageSize)
+	list, err := h.repo.QueryPoliticians(c.Request.Context(), filter, party, uf, sort, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -4,16 +4,16 @@ import (
 	"net/http"
 	"strconv"
 
-	"corruption-center/api/services"
+	"corruption-center/db/memgraph"
 	"github.com/gin-gonic/gin"
 )
 
 type GraphHandler struct {
-	service services.GraphService
+	repo memgraph.Repository
 }
 
-func NewGraphHandler(service services.GraphService) *GraphHandler {
-	return &GraphHandler{service: service}
+func NewGraphHandler(repo memgraph.Repository) *GraphHandler {
+	return &GraphHandler{repo: repo}
 }
 
 // GetScandalGraph godoc
@@ -29,7 +29,7 @@ func NewGraphHandler(service services.GraphService) *GraphHandler {
 func (h *GraphHandler) GetScandalGraph(c *gin.Context) {
 	id := c.Param("id")
 
-	graph, err := h.service.GetScandalGraph(c.Request.Context(), id)
+	graph, err := h.repo.QueryScandalGraph(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -55,7 +55,7 @@ func (h *GraphHandler) GetScandalGraph(c *gin.Context) {
 func (h *GraphHandler) GetPoliticianGraph(c *gin.Context) {
 	id := c.Param("id")
 
-	graph, err := h.service.GetPoliticianGraph(c.Request.Context(), id)
+	graph, err := h.repo.QueryPoliticianGraph(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -92,7 +92,7 @@ func (h *GraphHandler) ExpandNode(c *gin.Context) {
 		hops = parsed
 	}
 
-	graph, err := h.service.ExpandNode(c.Request.Context(), id, hops)
+	graph, err := h.repo.QueryExpandNode(c.Request.Context(), id, hops)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

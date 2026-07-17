@@ -4,16 +4,16 @@ import (
 	"net/http"
 	"strconv"
 
-	"corruption-center/api/services"
+	"corruption-center/db/memgraph"
 	"github.com/gin-gonic/gin"
 )
 
 type ProceedingHandler struct {
-	service services.GraphService
+	repo memgraph.Repository
 }
 
-func NewProceedingHandler(service services.GraphService) *ProceedingHandler {
-	return &ProceedingHandler{service: service}
+func NewProceedingHandler(repo memgraph.Repository) *ProceedingHandler {
+	return &ProceedingHandler{repo: repo}
 }
 
 // ListProceedings godoc
@@ -42,7 +42,7 @@ func (h *ProceedingHandler) ListProceedings(c *gin.Context) {
 	page, _ := strconv.Atoi(c.Query("page"))
 	pageSize, _ := strconv.Atoi(c.Query("page_size"))
 
-	list, err := h.service.ListProceedings(c.Request.Context(), court, hasConviction, q, sort, page, pageSize)
+	list, err := h.repo.QueryProceedings(c.Request.Context(), court, hasConviction, q, sort, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -64,7 +64,7 @@ func (h *ProceedingHandler) ListProceedings(c *gin.Context) {
 func (h *ProceedingHandler) GetProceeding(c *gin.Context) {
 	id := c.Param("id")
 
-	proceeding, err := h.service.GetProceeding(c.Request.Context(), id)
+	proceeding, err := h.repo.QueryProceeding(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

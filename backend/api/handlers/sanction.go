@@ -5,16 +5,16 @@ import (
 	"net/url"
 	"strconv"
 
-	"corruption-center/api/services"
+	"corruption-center/db/memgraph"
 	"github.com/gin-gonic/gin"
 )
 
 type SanctionHandler struct {
-	service services.GraphService
+	repo memgraph.Repository
 }
 
-func NewSanctionHandler(service services.GraphService) *SanctionHandler {
-	return &SanctionHandler{service: service}
+func NewSanctionHandler(repo memgraph.Repository) *SanctionHandler {
+	return &SanctionHandler{repo: repo}
 }
 
 // GetSanction godoc
@@ -37,7 +37,7 @@ func (h *SanctionHandler) GetSanction(c *gin.Context) {
 		id = decoded
 	}
 
-	sanction, err := h.service.GetSanction(c.Request.Context(), id)
+	sanction, err := h.repo.QuerySanction(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -76,7 +76,7 @@ func (h *SanctionHandler) ListSanctions(c *gin.Context) {
 	page, _ := strconv.Atoi(c.Query("page"))
 	pageSize, _ := strconv.Atoi(c.Query("page_size"))
 
-	list, err := h.service.ListSanctions(c.Request.Context(), registry, organ, q, sort, page, pageSize)
+	list, err := h.repo.QuerySanctions(c.Request.Context(), registry, organ, q, sort, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -94,7 +94,7 @@ func (h *SanctionHandler) ListSanctions(c *gin.Context) {
 // @Failure      500  {object}  models.ErrorResponse
 // @Router       /sanction-registries [get]
 func (h *SanctionHandler) GetSanctionRegistries(c *gin.Context) {
-	registries, err := h.service.GetSanctionRegistries(c.Request.Context())
+	registries, err := h.repo.QuerySanctionRegistries(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

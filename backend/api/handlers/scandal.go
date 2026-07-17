@@ -5,16 +5,16 @@ import (
 	"strconv"
 
 	"corruption-center/api/models"
-	"corruption-center/api/services"
+	"corruption-center/db/memgraph"
 	"github.com/gin-gonic/gin"
 )
 
 type ScandalHandler struct {
-	service services.GraphService
+	repo memgraph.Repository
 }
 
-func NewScandalHandler(service services.GraphService) *ScandalHandler {
-	return &ScandalHandler{service: service}
+func NewScandalHandler(repo memgraph.Repository) *ScandalHandler {
+	return &ScandalHandler{repo: repo}
 }
 
 // GetScandal godoc
@@ -30,7 +30,7 @@ func NewScandalHandler(service services.GraphService) *ScandalHandler {
 func (h *ScandalHandler) GetScandal(c *gin.Context) {
 	id := c.Param("id")
 
-	scandal, err := h.service.GetScandal(c.Request.Context(), id)
+	scandal, err := h.repo.QueryScandal(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -40,7 +40,7 @@ func (h *ScandalHandler) GetScandal(c *gin.Context) {
 		return
 	}
 
-	connections, err := h.service.GetScandalGraph(c.Request.Context(), id)
+	connections, err := h.repo.QueryScandalGraph(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -72,7 +72,7 @@ func (h *ScandalHandler) ListScandals(c *gin.Context) {
 	page, _ := strconv.Atoi(c.Query("page"))
 	pageSize, _ := strconv.Atoi(c.Query("page_size"))
 
-	list, err := h.service.ListScandals(c.Request.Context(), sort, page, pageSize)
+	list, err := h.repo.QueryScandals(c.Request.Context(), sort, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

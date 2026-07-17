@@ -4,16 +4,16 @@ import (
 	"net/http"
 	"time"
 
-	"corruption-center/api/services"
+	"corruption-center/db/memgraph"
 	"github.com/gin-gonic/gin"
 )
 
 type TimelineHandler struct {
-	service services.GraphService
+	repo memgraph.Repository
 }
 
-func NewTimelineHandler(service services.GraphService) *TimelineHandler {
-	return &TimelineHandler{service: service}
+func NewTimelineHandler(repo memgraph.Repository) *TimelineHandler {
+	return &TimelineHandler{repo: repo}
 }
 
 // GetTimeline godoc
@@ -53,7 +53,7 @@ func (h *TimelineHandler) GetTimeline(c *gin.Context) {
 		return
 	}
 
-	graph, err := h.service.GetTimeline(c.Request.Context(), from, to)
+	graph, err := h.repo.QueryTimeline(c.Request.Context(), from, to)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

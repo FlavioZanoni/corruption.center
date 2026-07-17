@@ -3,7 +3,6 @@ package api
 import (
 	"corruption-center/api/handlers"
 	"corruption-center/api/middleware"
-	"corruption-center/api/services"
 	"corruption-center/db/memgraph"
 	"corruption-center/db/psql"
 	"fmt"
@@ -11,8 +10,6 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 type ApiServer struct {
@@ -24,22 +21,14 @@ func NewApiServer(psql psql.Repository, memgraph memgraph.Repository) *ApiServer
 	return &ApiServer{psql: psql, memgraph: memgraph}
 }
 
-// @title         ⌬ API
-// @version       0.1.0
-// @description   Corruption graph api
-// @BasePath      /api/v1
 func (s *ApiServer) SetupRouter() *gin.Engine {
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
 	r.Use(middleware.CORS())
 
-	graphSvc := services.NewGraphService(s.memgraph)
-	searchSvc := services.NewSearchService(s.memgraph)
-
-	h := handlers.NewHandlers(graphSvc, searchSvc)
+	h := handlers.NewHandlers(s.memgraph)
 
 	r.GET("/health", h.Health.HealthCheck)
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// The public API is read-only over data that changes at worker cadence
 	// (nightly syncs, occasional backoffice edits), so let browsers and any

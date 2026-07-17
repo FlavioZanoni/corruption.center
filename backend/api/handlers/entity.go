@@ -3,16 +3,16 @@ package handlers
 import (
 	"net/http"
 
-	"corruption-center/api/services"
+	"corruption-center/db/memgraph"
 	"github.com/gin-gonic/gin"
 )
 
 type EntityHandler struct {
-	service services.GraphService
+	repo memgraph.Repository
 }
 
-func NewEntityHandler(service services.GraphService) *EntityHandler {
-	return &EntityHandler{service: service}
+func NewEntityHandler(repo memgraph.Repository) *EntityHandler {
+	return &EntityHandler{repo: repo}
 }
 
 // GetPerson godoc
@@ -28,7 +28,7 @@ func NewEntityHandler(service services.GraphService) *EntityHandler {
 func (h *EntityHandler) GetPerson(c *gin.Context) {
 	id := c.Param("id")
 
-	person, err := h.service.GetPerson(c.Request.Context(), id)
+	person, err := h.repo.QueryPerson(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -54,7 +54,7 @@ func (h *EntityHandler) GetPerson(c *gin.Context) {
 func (h *EntityHandler) GetOrganization(c *gin.Context) {
 	id := c.Param("id")
 
-	org, err := h.service.GetOrganization(c.Request.Context(), id)
+	org, err := h.repo.QueryOrganization(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
