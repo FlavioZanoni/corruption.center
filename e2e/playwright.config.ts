@@ -22,6 +22,20 @@ export default defineConfig({
     navigationTimeout: 20_000,
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      testIgnore: /mobile\.spec\.ts/,
+    },
+    // The desktop suite covers functional behavior; the mobile project runs
+    // only mobile.spec.ts, which checks layout on a phone viewport.
+    // Pixel 5, not an iPhone profile: iPhone emulation needs the WebKit build,
+    // and layout/overflow questions are engine-independent enough that the
+    // already-installed Chromium answers them.
+    {
+      name: "mobile",
+      use: { ...devices["Pixel 5"] },
+      testMatch: /mobile\.spec\.ts/,
+    },
   ],
 });

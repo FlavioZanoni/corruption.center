@@ -320,10 +320,13 @@ export function SearchBar() {
         <CreditsModal onClose={() => setIsCreditsOpen(false)} />
       )}
 
+      {/* z-40, above the quick-nav pills (z-30 in app/page.tsx): on a phone
+          viewport the pills sit right under the bar and were painting over the
+          results dropdown, stealing the tap on the first result. */}
       <div
         ref={containerRef}
         onBlur={handleContainerBlur}
-        className="absolute top-0 left-0 right-0 z-30 flex items-start pt-3 px-3"
+        className="absolute top-0 left-0 right-0 z-40 flex items-start pt-3 px-3"
       >
         {/* Left: filter toggle */}
         <button
