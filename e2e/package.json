@@ -1,0 +1,11 @@
+{
+  "name": "corruption-center-e2e",
+  "private": true,
+  "description": "Playwright end-to-end smoke tests for the public frontend.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
