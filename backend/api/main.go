@@ -41,7 +41,18 @@ func (s *ApiServer) SetupRouter() *gin.Engine {
 	r.GET("/health", h.Health.HealthCheck)
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
+	// The public API is read-only over data that changes at worker cadence
+	// (nightly syncs, occasional backoffice edits), so let browsers and any
+	// reverse proxy in front reuse responses briefly instead of re-running the
+	// same Memgraph queries. 5 min matches the frontend's client-side staleTime;
+	// stale-while-revalidate lets a proxy serve the old answer while it refreshes.
+	// The backoffice group below is authenticated and state-changing — it gets no
+	// cache headers, deliberately.
 	v1 := r.Group("/api/v1")
+	v1.Use(func(c *gin.Context) {
+		c.Header("Cache-Control", "public, max-age=300, stale-while-revalidate=3600")
+		c.Next()
+	})
 	{
 		v1.GET("/graph/scandal/:id", h.Graph.GetScandalGraph)
 		v1.GET("/graph/politician/:id", h.Graph.GetPoliticianGraph)
