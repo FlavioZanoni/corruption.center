@@ -13,6 +13,19 @@ const REVALIDATE_SECONDS = 3600
 
 // Returns null when the entity does not exist (HTTP 404); throws on any other
 // failure so a broken API surfaces as an error, never as a bogus "not found".
+// A dynamic route param reaches these fetchers still percent-encoded (Next
+// delivers params as captured from the URL), so encoding it again turns
+// "…participa%C3%A7…" into "…participa%25C3%25A7…" — the API then looks up an
+// id containing a literal "%C3%A7" and 404s. Decode first, then encode once.
+function idSegment(id: string): string {
+  try {
+    return encodeURIComponent(decodeURIComponent(id))
+  } catch {
+    // A stray raw "%" would make decodeURIComponent throw; encode as-is then.
+    return encodeURIComponent(id)
+  }
+}
+
 async function fetchEntity<T>(path: string): Promise<T | null> {
   const res = await fetch(`${SERVER_API_BASE}${path}`, {
     next: { revalidate: REVALIDATE_SECONDS },
@@ -53,7 +66,7 @@ export function fetchPoliticianDetail(
   id: string,
 ): Promise<PoliticianDetail | null> {
   return fetchEntity<PoliticianDetail>(
-    `/api/v1/politician/${encodeURIComponent(id)}`,
+    `/api/v1/politician/${idSegment(id)}`,
   )
 }
 
@@ -80,7 +93,7 @@ export interface ScandalDetail {
 
 export function fetchScandalDetail(id: string): Promise<ScandalDetail | null> {
   return fetchEntity<ScandalDetail>(
-    `/api/v1/scandal/${encodeURIComponent(id)}`,
+    `/api/v1/scandal/${idSegment(id)}`,
   )
 }
 
@@ -104,7 +117,7 @@ export interface PersonDetail {
 }
 
 export function fetchPersonDetail(id: string): Promise<PersonDetail | null> {
-  return fetchEntity<PersonDetail>(`/api/v1/person/${encodeURIComponent(id)}`)
+  return fetchEntity<PersonDetail>(`/api/v1/person/${idSegment(id)}`)
 }
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -127,7 +140,7 @@ export function fetchOrganizationDetail(
   id: string,
 ): Promise<OrganizationDetail | null> {
   return fetchEntity<OrganizationDetail>(
-    `/api/v1/organization/${encodeURIComponent(id)}`,
+    `/api/v1/organization/${idSegment(id)}`,
   )
 }
 
@@ -170,7 +183,7 @@ export function fetchLegalProceedingDetail(
   id: string,
 ): Promise<LegalProceedingRecord | null> {
   return fetchEntity<LegalProceedingRecord>(
-    `/api/v1/proceeding/${encodeURIComponent(id)}`,
+    `/api/v1/proceeding/${idSegment(id)}`,
   )
 }
 
@@ -204,5 +217,5 @@ export interface SanctionDetail {
 }
 
 export function fetchSanctionDetail(id: string): Promise<SanctionDetail | null> {
-  return fetchEntity<SanctionDetail>(`/api/v1/sanction/${encodeURIComponent(id)}`)
+  return fetchEntity<SanctionDetail>(`/api/v1/sanction/${idSegment(id)}`)
 }

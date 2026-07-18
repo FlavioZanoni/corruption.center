@@ -183,16 +183,29 @@ SET r.outcome = $outcome, r.source = 'djen'
 	return nil
 }
 
-func djenPersonID(name string) string {
+// urlStructural maps the characters that break a URL *path segment* to '_'.
+// A name-derived id becomes part of /pessoa/{id} and /organizacao/{id}, and
+// "ODEBRECHT S/A" produced ids whose '/' split the route into a 404 no
+// encoding can rescue (%2F is rejected by both Next and gin). Only these four
+// are structural; accents and other punctuation percent-encode fine and are
+// deliberately left alone — changing them would re-derive different ids for
+// thousands of existing nodes. Migration 006 rewrote the existing slashed ids
+// with the same '/'→'_' transform, so generator and data stay in lockstep.
+var urlStructural = strings.NewReplacer("/", "_", "?", "_", "#", "_", "%", "_")
+
+// nameSlug derives the stable, URL-safe id fragment for a name-keyed node.
+func nameSlug(name string) string {
 	clean := strings.ToLower(strings.TrimSpace(name))
 	clean = strings.Join(strings.Fields(clean), "_")
-	return "person_djen_" + clean
+	return urlStructural.Replace(clean)
+}
+
+func djenPersonID(name string) string {
+	return "person_djen_" + nameSlug(name)
 }
 
 func djenOrganizationID(name string) string {
-	clean := strings.ToLower(strings.TrimSpace(name))
-	clean = strings.Join(strings.Fields(clean), "_")
-	return "org_djen_" + clean
+	return "org_djen_" + nameSlug(name)
 }
 
 // CitedPerson is an anonymous Person already linked as a defendant. Rematch mode

@@ -246,7 +246,5 @@ RETURN partner.id AS id, created AS created
 // qsaPersonID derives a stable name-based Person id for a QSA board member.
 // QSA individuals never expose a full CPF, so the name is the only stable key.
 func qsaPersonID(name string) string {
-	clean := strings.ToLower(strings.TrimSpace(name))
-	clean = strings.Join(strings.Fields(clean), "_")
-	return "person_qsa_" + clean
+	return "person_qsa_" + nameSlug(name)
 }
