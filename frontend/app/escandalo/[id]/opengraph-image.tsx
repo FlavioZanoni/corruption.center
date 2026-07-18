@@ -18,8 +18,9 @@ export const alt = "Escândalo no corruption.center"
 const RED = "#cc2222"
 
 // The same network motif as the static brand card (and the favicon): the
-// scandal node in red at the center of its connections. Satori renders inline
-// SVG, so the generated cards keep the brand's one recognizable mark.
+// scandal node in red at the center of its connections, drawn like the real
+// force graph — gently curved edges, a soft glow on the hub, and size/opacity
+// falling off toward the periphery. Satori renders inline SVG natively.
 function Network() {
   return (
     <svg
@@ -28,24 +29,39 @@ function Network() {
       viewBox="60 0 500 630"
       style={{ position: "absolute", right: -40, top: 0 }}
     >
-      <g stroke="#3a3a3a" strokeWidth="3" fill="none">
-        <path d="M300 315 L440 180" />
-        <path d="M300 315 L470 400" />
-        <path d="M300 315 L200 480" />
-        <path d="M300 315 L180 200" />
-        <path d="M440 180 L470 400" />
-        <path d="M180 200 L120 90" />
-        <path d="M470 400 L520 530" />
-        <path d="M440 180 L520 80" />
+      {/* hub edges */}
+      <g stroke="#4a4a4a" strokeWidth="3" fill="none">
+        <path d="M300 310 Q375 235 445 175" />
+        <path d="M300 310 Q395 355 475 405" />
+        <path d="M300 310 Q240 255 185 205" />
+        <path d="M300 310 Q250 395 215 475" />
       </g>
-      <circle cx="180" cy="200" r="16" fill="#4488ff" />
-      <circle cx="440" cy="180" r="20" fill="#d8d8d8" />
-      <circle cx="470" cy="400" r="17" fill="#8b7ec8" />
-      <circle cx="200" cy="480" r="15" fill="#22aa66" />
-      <circle cx="120" cy="90" r="11" fill="#6a6a6a" />
-      <circle cx="520" cy="530" r="12" fill="#d98a4b" />
-      <circle cx="520" cy="80" r="10" fill="#6a6a6a" />
-      <circle cx="300" cy="315" r="30" fill={RED} />
+      {/* second-tier edges, dimmer and thinner */}
+      <g stroke="#333333" strokeWidth="2" fill="none">
+        <path d="M445 175 Q480 290 475 405" />
+        <path d="M445 175 Q500 130 540 95" />
+        <path d="M445 175 Q510 240 555 300" />
+        <path d="M475 405 Q525 355 555 300" />
+        <path d="M475 405 Q505 465 530 520" />
+        <path d="M185 205 Q150 150 125 95" />
+        <path d="M215 475 Q165 505 120 530" />
+      </g>
+      {/* glow behind the scandal hub */}
+      <circle cx="300" cy="310" r="82" fill={RED} opacity="0.04" />
+      <circle cx="300" cy="310" r="60" fill={RED} opacity="0.07" />
+      <circle cx="300" cy="310" r="40" fill={RED} opacity="0.12" />
+      {/* inner ring: the entity types, in the graph's own colors */}
+      <circle cx="445" cy="175" r="18" fill="#d8d8d8" />
+      <circle cx="475" cy="405" r="16" fill="#8b7ec8" />
+      <circle cx="185" cy="205" r="15" fill="#4488ff" />
+      <circle cx="215" cy="475" r="14" fill="#22aa66" />
+      {/* periphery, fading out */}
+      <circle cx="530" cy="520" r="11" fill="#d98a4b" />
+      <circle cx="540" cy="95" r="9" fill="#6a6a6a" />
+      <circle cx="555" cy="300" r="9" fill="#7a7a7a" />
+      <circle cx="125" cy="95" r="8" fill="#6a6a6a" opacity="0.9" />
+      <circle cx="120" cy="530" r="7" fill="#5a5a5a" opacity="0.85" />
+      <circle cx="300" cy="310" r="28" fill={RED} />
     </svg>
   )
 }
