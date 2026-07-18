@@ -31,20 +31,20 @@ function Network() {
     >
       {/* hub edges */}
       <g stroke="#4a4a4a" strokeWidth="3" fill="none">
-        <path d="M300 310 Q375 235 445 175" />
-        <path d="M300 310 Q395 355 475 405" />
-        <path d="M300 310 Q240 255 185 205" />
-        <path d="M300 310 Q250 395 215 475" />
+        <path d="M300 310 L445 175" />
+        <path d="M300 310 L475 405" />
+        <path d="M300 310 L185 205" />
+        <path d="M300 310 L215 475" />
       </g>
       {/* second-tier edges, dimmer and thinner */}
       <g stroke="#333333" strokeWidth="2" fill="none">
-        <path d="M445 175 Q480 290 475 405" />
-        <path d="M445 175 Q500 130 540 95" />
-        <path d="M445 175 Q510 240 555 300" />
-        <path d="M475 405 Q525 355 555 300" />
-        <path d="M475 405 Q505 465 530 520" />
-        <path d="M185 205 Q150 150 125 95" />
-        <path d="M215 475 Q165 505 120 530" />
+        <path d="M445 175 L475 405" />
+        <path d="M445 175 L540 95" />
+        <path d="M445 175 L555 300" />
+        <path d="M475 405 L555 300" />
+        <path d="M475 405 L530 520" />
+        <path d="M185 205 L125 95" />
+        <path d="M215 475 L120 530" />
       </g>
       {/* glow behind the scandal hub */}
       <circle cx="300" cy="310" r="82" fill={RED} opacity="0.04" />
