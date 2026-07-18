@@ -17,6 +17,39 @@ export const alt = "Escândalo no corruption.center"
 
 const RED = "#cc2222"
 
+// The same network motif as the static brand card (and the favicon): the
+// scandal node in red at the center of its connections. Satori renders inline
+// SVG, so the generated cards keep the brand's one recognizable mark.
+function Network() {
+  return (
+    <svg
+      width="500"
+      height="630"
+      viewBox="60 0 500 630"
+      style={{ position: "absolute", right: -40, top: 0 }}
+    >
+      <g stroke="#3a3a3a" strokeWidth="3" fill="none">
+        <path d="M300 315 L440 180" />
+        <path d="M300 315 L470 400" />
+        <path d="M300 315 L200 480" />
+        <path d="M300 315 L180 200" />
+        <path d="M440 180 L470 400" />
+        <path d="M180 200 L120 90" />
+        <path d="M470 400 L520 530" />
+        <path d="M440 180 L520 80" />
+      </g>
+      <circle cx="180" cy="200" r="16" fill="#4488ff" />
+      <circle cx="440" cy="180" r="20" fill="#d8d8d8" />
+      <circle cx="470" cy="400" r="17" fill="#8b7ec8" />
+      <circle cx="200" cy="480" r="15" fill="#22aa66" />
+      <circle cx="120" cy="90" r="11" fill="#6a6a6a" />
+      <circle cx="520" cy="530" r="12" fill="#d98a4b" />
+      <circle cx="520" cy="80" r="10" fill="#6a6a6a" />
+      <circle cx="300" cy="315" r="30" fill={RED} />
+    </svg>
+  )
+}
+
 function yearRange(start?: string | null, end?: string | null): string {
   const y = (d?: string | null) => (d ? d.slice(0, 4) : "")
   if (!y(start)) return ""
@@ -72,6 +105,7 @@ export default async function Image({
             display: "flex",
           }}
         />
+        <Network />
         <div
           style={{
             display: "flex",
@@ -95,11 +129,12 @@ export default async function Image({
             style={{
               display: "flex",
               fontFamily: "serif",
-              fontSize: name.length > 28 ? 64 : 84,
+              fontSize: name.length > 28 ? 60 : 80,
               fontWeight: 700,
               color: "#e8e8e8",
               lineHeight: 1.1,
-              maxWidth: 1040,
+              // leave the right side to the network
+              maxWidth: 700,
             }}
           >
             {name}
