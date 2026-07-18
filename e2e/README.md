@@ -24,9 +24,9 @@ Then:
 
 ```sh
 cd e2e
-npm install
-npx playwright install chromium
-npx playwright test
+pnpm install
+pnpm exec playwright install chromium
+pnpm exec playwright test
 ```
 
 Point at a different host with `E2E_BASE_URL` / `E2E_API_URL` if your ports
