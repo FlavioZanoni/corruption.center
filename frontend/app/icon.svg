@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- The product in one glyph: a network with the scandal at its center.
+       Site palette: bg #0a0a0a, accent #cc2222 (see globals.css). -->
+  <rect width="64" height="64" rx="14" fill="#0a0a0a"/>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="13.5" fill="none" stroke="#2a2a2a"/>
+  <!-- edges first, nodes painted over them -->
+  <g stroke="#4a4a4a" stroke-width="3.5" stroke-linecap="round">
+    <path d="M27 27 L48 17"/>
+    <path d="M27 27 L47 47"/>
+    <path d="M27 27 L15 50"/>
+    <path d="M48 17 L47 47"/>
+  </g>
+  <circle cx="48" cy="17" r="6" fill="#d8d8d8"/>
+  <circle cx="47" cy="47" r="6" fill="#d8d8d8"/>
+  <circle cx="15" cy="50" r="5" fill="#8a8a8a"/>
+  <circle cx="27" cy="27" r="9.5" fill="#cc2222"/>
+</svg>
