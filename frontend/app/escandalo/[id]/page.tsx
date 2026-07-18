@@ -100,6 +100,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url,
       siteName: SITE_NAME,
       locale: "pt_BR",
+      // Page-level openGraph replaces the root block (shallow merge), which
+      // silently dropped the file-convention og:image — re-point at the card.
+      images: [siteUrl("/opengraph-image.png")],
     },
     twitter: {
       card: "summary",
